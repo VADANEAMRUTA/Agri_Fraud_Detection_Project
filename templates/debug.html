@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}OCR Debug - AgriGuard{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>OCR Debug Information</h2>
+    
+    <div class="card">
+        <h3>Processed Image</h3>
+        {% if debug_image %}
+        <img src="{{ debug_image }}" alt="Processed Image" style="max-width: 100%; border: 1px solid #ccc;">
+        {% endif %}
+    </div>
+    
+    <div class="card">
+        <h3>OCR Results with Different Settings</h3>
+        {% for mode, text in debug_info.items() %}
+        <div class="debug-result">
+            <h4>{{ mode }}</h4>
+            <pre>{{ text if text else '[No text detected]' }}</pre>
+        </div>
+        {% endfor %}
+    </div>
+    
+    <a href="/detect" class="btn">Back to Detection</a>
+</div>
+{% endblock %}

@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - AgriGuard</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .register-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4edf5 100%);
+            position: relative;
+        }
+        
+        .register-wrapper {
+            width: 100%;
+            max-width: 500px;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+            padding: 3rem;
+            animation: fadeInUp 0.6s ease;
+        }
+        
+        .register-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            font-size: 2rem;
+            font-weight: 700;
+            color: #2e7d32;
+            margin-bottom: 1rem;
+        }
+        
+        .logo i {
+            font-size: 2.5rem;
+        }
+        
+        .register-subtitle {
+            color: #64748b;
+            margin-bottom: 2rem;
+        }
+        
+        .input-with-icon {
+            position: relative;
+            margin-bottom: 1.5rem;
+        }
+        
+        .input-with-icon i {
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #64748b;
+            font-size: 1.2rem;
+        }
+        
+        .input-with-icon input {
+            padding-left: 45px;
+            width: 100%;
+        }
+        
+        .password-strength {
+            margin-top: 5px;
+            height: 4px;
+            background: #e2e8f0;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        
+        .strength-bar {
+            height: 100%;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        
+        .strength-weak .strength-bar {
+            background: #ef4444;
+            width: 33%;
+        }
+        
+        .strength-medium .strength-bar {
+            background: #f59e0b;
+            width: 66%;
+        }
+        
+        .strength-strong .strength-bar {
+            background: #10b981;
+            width: 100%;
+        }
+        
+        .terms-agreement {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 2rem;
+            padding: 1rem;
+            background: #f8fafc;
+            border-radius: 10px;
+        }
+        
+        .terms-agreement a {
+            color: #2e7d32;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        
+        .terms-agreement a:hover {
+            text-decoration: underline;
+        }
+        
+        .register-btn {
+            width: 100%;
+            padding: 15px;
+            font-size: 1.1rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        
+        .login-link {
+            text-align: center;
+            color: #64748b;
+        }
+        
+        .login-link a {
+            color: #2e7d32;
+            font-weight: 600;
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+        
+        .login-link a:hover {
+            color: #1b5e20;
+            text-decoration: underline;
+        }
+        
+        .benefits {
+            margin-top: 2rem;
+            padding-top: 2rem;
+            border-top: 1px solid #e2e8f0;
+        }
+        
+        .benefit-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 0.8rem;
+            color: #64748b;
+        }
+        
+        .benefit-item i {
+            color: #2e7d32;
+        }
+        
+        .error-message {
+            background: #fee2e2;
+            color: #991b1b;
+            padding: 12px 20px;
+            border-radius: 10px;
+            margin-bottom: 1.5rem;
+            border-left: 4px solid #ef4444;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: shake 0.5s ease;
+        }
+        
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+    </style>
+</head>
+<body>
+    <div class="register-container">
+        <div class="register-wrapper">
+            <div class="register-header">
+                <div class="logo">
+                    <i class="fas fa-shield-alt"></i>
+                    <span>AgriGuard</span>
+                </div>
+                <h1>Create Your Account</h1>
+                <p class="register-subtitle">Join thousands of farmers protecting themselves from fraud</p>
+            </div>
+            
+            {% if get_flashed_messages() %}
+            <div class="error-message">
+                <i class="fas fa-exclamation-circle"></i>
+                {% for message in get_flashed_messages() %}
+                    {{ message }}
+                {% endfor %}
+            </div>
+            {% endif %}
+            
+            <form method="POST" action="/register">
+                <div class="input-with-icon">
+                    <i class="fas fa-user"></i>
+                    <input type="text" 
+                           name="username" 
+                           class="form-input" 
+                           placeholder="Choose a username" 
+                           required
+                           autofocus>
+                </div>
+                
+                <div class="input-with-icon">
+                    <i class="fas fa-envelope"></i>
+                    <input type="email" 
+                           name="email" 
+                           class="form-input" 
+                           placeholder="Your email address" 
+                           required>
+                </div>
+                
+                <div class="input-with-icon">
+                    <i class="fas fa-phone"></i>
+                    <input type="tel" 
+                           name="mobile" 
+                           class="form-input" 
+                           placeholder="Mobile number" 
+                           pattern="[0-9]{10}" 
+                           required>
+                </div>
+                
+                <div class="input-with-icon">
+                    <i class="fas fa-lock"></i>
+                    <input type="password" 
+                           name="password" 
+                           id="password" 
+                           class="form-input" 
+                           placeholder="Create a password" 
+                           required
+                           oninput="checkPasswordStrength()">
+                    <div class="password-strength">
+                        <div class="strength-bar"></div>
+                    </div>
+                </div>
+                
+                <div class="input-with-icon">
+                    <i class="fas fa-lock"></i>
+                    <input type="password" 
+                           name="confirm_password" 
+                           class="form-input" 
+                           placeholder="Confirm password" 
+                           required>
+                </div>
+                
+                <div class="terms-agreement">
+                    <input type="checkbox" id="terms" name="terms" required>
+                    <label for="terms">
+                        I agree to the <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>
+                    </label>
+                </div>
+                
+                <button type="submit" class="btn btn-primary register-btn">
+                    <i class="fas fa-user-plus"></i>
+                    Create Account
+                </button>
+            </form>
+            
+            <div class="login-link">
+                Already have an account? 
+                <a href="/login">Sign in here</a>
+            </div>
+            
+            <div class="benefits">
+                <h3 style="font-size: 1rem; color: #64748b; margin-bottom: 1rem;">
+                    <i class="fas fa-gift"></i> Benefits of joining:
+                </h3>
+                <div class="benefit-item">
+                    <i class="fas fa-check-circle"></i>
+                    <span>Free fraud detection for all farmers</span>
+                </div>
+                <div class="benefit-item">
+                    <i class="fas fa-check-circle"></i>
+                    <span>Save and track your fraud reports</span>
+                </div>
+                <div class="benefit-item">
+                    <i class="fas fa-check-circle"></i>
+                    <span>Get alerts about new scam patterns</span>
+                </div>
+                <div class="benefit-item">
+                    <i class="fas fa-check-circle"></i>
+                    <span>Access in multiple regional languages</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function checkPasswordStrength() {
+            const password = document.getElementById('password').value;
+            const strengthBar = document.querySelector('.password-strength');
+            
+            // Reset
+            strengthBar.className = 'password-strength';
+            
+            if (password.length === 0) return;
+            
+            let strength = 0;
+            
+            // Check length
+            if (password.length >= 8) strength++;
+            
+            // Check for uppercase
+            if (/[A-Z]/.test(password)) strength++;
+            
+            // Check for numbers
+            if (/[0-9]/.test(password)) strength++;
+            
+            // Check for special characters
+            if (/[^A-Za-z0-9]/.test(password)) strength++;
+            
+            // Update strength indicator
+            if (password.length < 6) {
+                strengthBar.classList.add('strength-weak');
+            } else if (strength <= 2) {
+                strengthBar.classList.add('strength-weak');
+            } else if (strength === 3) {
+                strengthBar.classList.add('strength-medium');
+            } else {
+                strengthBar.classList.add('strength-strong');
+            }
+        }
+        
+        // Form validation
+        document.querySelector('form').addEventListener('submit', function(e) {
+            const password = document.querySelector('input[name="password"]').value;
+            const confirmPassword = document.querySelector('input[name="confirm_password"]').value;
+            
+            if (password !== confirmPassword) {
+                e.preventDefault();
+                showToast('Passwords do not match!', 'error');
+                return;
+            }
+            
+            if (password.length < 6) {
+                e.preventDefault();
+                showToast('Password must be at least 6 characters', 'error');
+                return;
+            }
+        });
+        
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = message;
+            toast.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                padding: 1rem 2rem;
+                background: ${type === 'error' ? '#ef4444' : type === 'success' ? '#10b981' : '#3b82f6'};
+                color: white;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                z-index: 9999;
+                animation: slideInRight 0.3s ease;
+            `;
+            
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.animation = 'slideOutRight 0.3s ease';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+    </script>
+</body>
+</html>

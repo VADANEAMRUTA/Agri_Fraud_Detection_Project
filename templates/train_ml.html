@@ -1,0 +1,137 @@
+<!-- templates/train_ml.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Train ML Model | AgriGuard Admin</title>
+    <style>
+        .train-container {
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 30px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .model-status {
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+        .model-active {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .model-inactive {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        .training-form {
+            margin-top: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+        input[type="number"], select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .btn {
+            padding: 12px 24px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .btn:hover {
+            background-color: #218838;
+        }
+        .btn-secondary {
+            background-color: #6c757d;
+        }
+        .training-info {
+            background-color: #e9ecef;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 30px;
+        }
+    </style>
+</head>
+<body>
+    {% include 'admin_navbar.html' %}
+    
+    <div class="train-container">
+        <h1>🤖 ML Model Training</h1>
+        
+        <div class="model-status {% if model_exists %}model-active{% else %}model-inactive{% endif %}">
+            <h3>Current Model Status</h3>
+            <p>
+                {% if model_exists %}
+                ✅ ML Model is loaded and active
+                {% else %}
+                ⚠️ No ML Model loaded. Using rule-based detection only.
+                {% endif %}
+            </p>
+        </div>
+        
+        <div class="training-form">
+            <h3>Train New Model</h3>
+            <form method="POST">
+                <div class="form-group">
+                    <label>Training Data Source:</label>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="use_sample_data" name="use_sample_data" checked>
+                        <label for="use_sample_data">Use sample training data (recommended for testing)</label>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="epochs">Training Iterations:</label>
+                    <input type="number" id="epochs" name="epochs" value="10" min="1" max="100">
+                </div>
+                
+                <div class="form-group">
+                    <label for="model_type">Model Type:</label>
+                    <select id="model_type" name="model_type">
+                        <option value="random_forest">Random Forest (Recommended)</option>
+                        <option value="svm">Support Vector Machine</option>
+                        <option value="neural_net">Neural Network</option>
+                    </select>
+                </div>
+                
+                <button type="submit" class="btn">🚀 Train Model Now</button>
+                <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
+            </form>
+        </div>
+        
+        <div class="training-info">
+            <h4>📚 About ML Training:</h4>
+            <ul>
+                <li>Training will create a machine learning model that learns from examples</li>
+                <li>The model analyzes text patterns to detect fraud more accurately</li>
+                <li>Sample data includes common fraud and genuine agricultural content</li>
+                <li>Training typically takes 30-60 seconds</li>
+                <li>Once trained, the model will automatically be used for all future detections</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

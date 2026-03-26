@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - SQL Query | AgriGuard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .admin-container {
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .query-form {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+        select, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        textarea {
+            height: 150px;
+            resize: vertical;
+        }
+        .btn {
+            display: inline-block;
+            padding: 10px 20px;
+            background-color: #3498db;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .btn-back {
+            background-color: #6c757d;
+        }
+        .btn-danger {
+            background-color: #dc3545;
+        }
+        .btn-success {
+            background-color: #28a745;
+        }
+        .alert {
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .alert-error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .alert-success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .results-container {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+        .warning {
+            background-color: #fff3cd;
+            color: #856404;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            border: 1px solid #ffeaa7;
+        }
+    </style>
+</head>
+<body>
+    {% include 'admin_navbar.html' %}
+    
+    <div class="admin-container">
+        <h1>SQL Query Tool</h1>
+        
+        <div class="warning">
+            <strong>⚠️ Security Warning:</strong> Only use SELECT, PRAGMA, and DESCRIBE queries. 
+            Modifying queries (INSERT, UPDATE, DELETE, DROP) are disabled for security reasons.
+        </div>
+        
+        <div class="query-form">
+            <form method="POST">
+                <div class="form-group">
+                    <label for="database">Database:</label>
+                    <select name="database" id="database">
+                        <option value="users.db" {% if request.form.get('database') == 'users.db' %}selected{% endif %}>users.db</option>
+                        <option value="agriguard.db" {% if request.form.get('database') == 'agriguard.db' %}selected{% endif %}>agriguard.db</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="query">SQL Query:</label>
+                    <textarea name="query" id="query" placeholder="SELECT * FROM users LIMIT 10;">{{ query }}</textarea>
+                </div>
+                
+                <div>
+                    <button type="submit" class="btn btn-success">Execute Query</button>
+                    <a href="{{ url_for('admin_query') }}" class="btn">Clear</a>
+                    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-back">Back to Dashboard</a>
+                </div>
+            </form>
+        </div>
+        
+        {% if error %}
+        <div class="alert alert-error">
+            <strong>Error:</strong> {{ error }}
+        </div>
+        {% endif %}
+        
+        {% if results %}
+        <div class="results-container">
+            <h3>Query Results</h3>
+            
+            {% if results.message %}
+            <div class="alert alert-success">
+                {{ results.message }}
+            </div>
+            {% else %}
+            <p><strong>Rows Returned:</strong> {{ results.row_count }}</p>
+            
+            <table>
+                <thead>
+                    <tr>
+                        {% for column in results.columns %}
+                        <th>{{ column }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in results.data %}
+                    <tr>
+                        {% for column in results.columns %}
+                        <td>{{ row[column] }}</td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+    
+    <script>
+        // Add some sample queries for easy access
+        document.getElementById('query').addEventListener('focus', function() {
+            if (this.value === '') {
+                this.value = "SELECT * FROM users LIMIT 10;";
+            }
+        });
+        
+        function setSampleQuery(query) {
+            document.getElementById('query').value = query;
+        }
+        
+        // Add common queries as buttons if needed
+        const sampleQueries = [
+            {name: "All Users", query: "SELECT id, username, email, account_type, created_at FROM users ORDER BY created_at DESC LIMIT 50;"},
+            {name: "Recent Scans", query: "SELECT s.*, u.username FROM scans s LEFT JOIN users u ON s.user_id = u.id ORDER BY s.created_at DESC LIMIT 20;"},
+            {name: "User Activity", query: "SELECT * FROM user_activity ORDER BY timestamp DESC LIMIT 20;"},
+            {name: "Table Info", query: "SELECT name FROM sqlite_master WHERE type='table';"}
+        ];
+    </script>
+</body>
+</html>

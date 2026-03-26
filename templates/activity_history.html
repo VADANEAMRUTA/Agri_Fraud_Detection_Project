@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Activity History - AgriGuard</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        :root {
+            --primary-color: #2e7d32;
+            --secondary-color: #4caf50;
+            --accent-color: #81c784;
+            --light-bg: #f8f9fa;
+            --dark-text: #333;
+            --light-text: #666;
+        }
+        
+        .activity-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .page-header {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+        }
+        
+        .stats-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            margin-bottom: 20px;
+            border-top: 4px solid var(--primary-color);
+        }
+        
+        .activity-table {
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+        
+        .table thead th {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 15px;
+        }
+        
+        .table tbody tr:hover {
+            background-color: rgba(46, 125, 50, 0.05);
+        }
+        
+        .badge-login { background-color: #2196f3 !important; }
+        .badge-scan { background-color: #ff9800 !important; }
+        .badge-fraud { background-color: #f44336 !important; }
+        .badge-profile { background-color: #9c27b0 !important; }
+        .badge-system { background-color: #607d8b !important; }
+        
+        .empty-state {
+            text-align: center;
+            padding: 50px 20px;
+            color: var(--light-text);
+        }
+        
+        .empty-state i {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            color: #ddd;
+        }
+        
+        .back-button {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 10px 25px;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .back-button:hover {
+            background: var(--secondary-color);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(46, 125, 50, 0.3);
+            color: white;
+        }
+        
+        .filter-buttons .btn {
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        
+        @media (max-width: 768px) {
+            .activity-table {
+                font-size: 0.9rem;
+            }
+            
+            .page-header h1 {
+                font-size: 1.8rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar navbar-expand-lg navbar-dark" style="background-color: var(--primary-color);">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-shield-alt"></i> AgriGuard
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/"><i class="fas fa-home"></i> Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/detect"><i class="fas fa-search"></i> Detect Fraud</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/profile"><i class="fas fa-user"></i> Profile</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/instruction"><i class="fas fa-info-circle"></i> Guide</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/about"><i class="fas fa-question-circle"></i> About</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/logout"><i class="fas fa-sign-out-alt"></i> Logout</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Activity History Content -->
+    <div class="activity-container">
+        <!-- Page Header -->
+        <div class="page-header">
+            <div class="d-flex justify-content-between align-items-center flex-wrap">
+                <div>
+                    <h1 class="display-6 fw-bold mb-3">
+                        <i class="fas fa-history me-2"></i>Activity History
+                    </h1>
+                    <p class="lead mb-0">Track all your activities on AgriGuard</p>
+                    <p class="mb-0">User: <strong>{{ username }}</strong></p>
+                </div>
+                <a href="/profile" class="back-button">
+                    <i class="fas fa-arrow-left me-2"></i>Back to Profile
+                </a>
+            </div>
+        </div>
+
+        <!-- Activity Stats -->
+        <div class="row mb-4">
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="stats-card text-center">
+                    <div class="stats-icon">
+                        <i class="fas fa-list-ol fa-2x text-primary"></i>
+                    </div>
+                    <div class="stats-number">{{ total_activities }}</div>
+                    <div class="stats-label">Total Activities</div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="stats-card text-center">
+                    <div class="stats-icon">
+                        <i class="fas fa-search fa-2x text-warning"></i>
+                    </div>
+                    <div class="stats-number">{{ type_counts.get('scan', 0) }}</div>
+                    <div class="stats-label">Scans</div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="stats-card text-center">
+                    <div class="stats-icon">
+                        <i class="fas fa-user fa-2x text-purple"></i>
+                    </div>
+                    <div class="stats-number">{{ type_counts.get('login', 0) + type_counts.get('profile', 0) }}</div>
+                    <div class="stats-label">Profile Activities</div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="stats-card text-center">
+                    <div class="stats-icon">
+                        <i class="fas fa-shield-alt fa-2x text-danger"></i>
+                    </div>
+                    <div class="stats-number">{{ type_counts.get('fraud', 0) }}</div>
+                    <div class="stats-label">Fraud Detections</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter Buttons -->
+        <div class="filter-buttons mb-4">
+            <button class="btn btn-outline-primary active" onclick="filterActivities('all')">
+                <i class="fas fa-layer-group me-1"></i>All Activities
+            </button>
+            <button class="btn btn-outline-warning" onclick="filterActivities('scan')">
+                <i class="fas fa-search me-1"></i>Scans
+            </button>
+            <button class="btn btn-outline-info" onclick="filterActivities('login')">
+                <i class="fas fa-sign-in-alt me-1"></i>Logins
+            </button>
+            <button class="btn btn-outline-danger" onclick="filterActivities('fraud')">
+                <i class="fas fa-shield-alt me-1"></i>Fraud Detections
+            </button>
+            <button class="btn btn-outline-secondary" onclick="filterActivities('profile')">
+                <i class="fas fa-user me-1"></i>Profile Updates
+            </button>
+        </div>
+
+        <!-- Activities Table -->
+        <div class="activity-table">
+            {% if activities %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0" id="activityTable">
+                    <thead>
+                        <tr>
+                            <th>Date & Time</th>
+                            <th>Action</th>
+                            <th>Details</th>
+                            <th>Type</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for activity in activities %}
+                        <tr class="activity-row" data-type="{{ activity.type }}">
+                            <td>
+                                <i class="far fa-clock me-1"></i>
+                                {{ activity.timestamp[:16] if activity.timestamp else 'N/A' }}
+                            </td>
+                            <td><strong>{{ activity.action }}</strong></td>
+                            <td>{{ activity.details }}</td>
+                            <td>
+                                {% if activity.type == 'scan' %}
+                                <span class="badge badge-scan">Scan</span>
+                                {% elif activity.type == 'login' %}
+                                <span class="badge badge-login">Login</span>
+                                {% elif activity.type == 'fraud' %}
+                                <span class="badge badge-fraud">Fraud</span>
+                                {% elif activity.type == 'profile' %}
+                                <span class="badge badge-profile">Profile</span>
+                                {% elif activity.type == 'system' %}
+                                <span class="badge badge-system">System</span>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ activity.type }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <i class="fas fa-history"></i>
+                <h4>No Activity Found</h4>
+                <p class="text-muted">You haven't performed any activities yet.</p>
+                <a href="/detect" class="back-button">
+                    <i class="fas fa-search me-2"></i>Start Your First Scan
+                </a>
+            </div>
+            {% endif %}
+        </div>
+        
+        <!-- Pagination Info -->
+        {% if activities %}
+        <div class="d-flex justify-content-between align-items-center mt-3">
+            <div class="text-muted">
+                Showing {{ activities|length }} activities
+            </div>
+            <div>
+                <button class="btn btn-outline-primary" onclick="exportActivities()">
+                    <i class="fas fa-download me-2"></i>Export as CSV
+                </button>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer mt-5 py-4" style="background-color: var(--primary-color); color: white;">
+        <div class="container text-center">
+            <p>&copy; 2025 AgriGuard Fraud Detection System. All rights reserved.</p>
+            <p class="mb-0">Protecting Farmers from Fraudulent Advertisements</p>
+        </div>
+    </footer>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        function filterActivities(type) {
+            const rows = document.querySelectorAll('.activity-row');
+            const buttons = document.querySelectorAll('.filter-buttons .btn');
+            
+            // Update active button
+            buttons.forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.textContent.includes(type.charAt(0).toUpperCase() + type.slice(1)) || 
+                    (type === 'all' && btn.textContent.includes('All Activities'))) {
+                    btn.classList.add('active');
+                }
+            });
+            
+            // Filter rows
+            rows.forEach(row => {
+                if (type === 'all' || row.getAttribute('data-type') === type) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        }
+        
+        function exportActivities() {
+            const rows = document.querySelectorAll('#activityTable tbody tr');
+            let csv = 'Date,Time,Action,Details,Type\n';
+            
+            rows.forEach(row => {
+                if (row.style.display !== 'none') {
+                    const cols = row.querySelectorAll('td');
+                    const date = cols[0].textContent.trim();
+                    const action = cols[1].textContent.trim();
+                    const details = cols[2].textContent.trim();
+                    const type = cols[3].textContent.trim();
+                    
+                    csv += `"${date}","${action}","${details}","${type}"\n`;
+                }
+            });
+            
+            // Create download link
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.setAttribute('hidden', '');
+            a.setAttribute('href', url);
+            a.setAttribute('download', 'agriguard_activity_history.csv');
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            
+            // Show success message
+            showAlert('Activities exported successfully!', 'success');
+        }
+        
+        function showAlert(message, type) {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+            alertDiv.style.position = 'fixed';
+            alertDiv.style.top = '20px';
+            alertDiv.style.right = '20px';
+            alertDiv.style.zIndex = '9999';
+            alertDiv.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            
+            document.body.appendChild(alertDiv);
+            
+            setTimeout(() => {
+                alertDiv.remove();
+            }, 5000);
+        }
+    </script>
+</body>
+</html>

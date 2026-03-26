@@ -1,0 +1,41 @@
+<!-- templates/navbar.html -->
+<nav class="navbar">
+    <a href="/language" class="nav-brand">
+        <i class="fas fa-shield-alt"></i>
+        <span>AgriGuard</span>
+    </a>
+    
+    <div class="nav-menu">
+        {% if session.get('user') %}
+            <a href="/language" class="nav-link {% if request.endpoint == 'language' %}active{% endif %}">
+                <i class="fas fa-home"></i>
+                Home
+            </a>
+            <a href="/detect" class="nav-link {% if request.endpoint == 'detect' %}active{% endif %}">
+                <i class="fas fa-search"></i>
+                Check Fraud
+            </a>
+            <a href="/profile" class="nav-link {% if request.endpoint == 'profile' %}active{% endif %}">
+                <i class="fas fa-user"></i>
+                Profile
+            </a>
+            <div class="user-welcome">
+                <i class="fas fa-user-circle"></i>
+                <span>{{ session.get('user') }}</span>
+            </div>
+            <a href="/logout" class="nav-link logout-btn">
+                <i class="fas fa-sign-out-alt"></i>
+                Logout
+            </a>
+        {% else %}
+            <a href="/login" class="nav-link">
+                <i class="fas fa-sign-in-alt"></i>
+                Login
+            </a>
+            <a href="/register" class="nav-link">
+                <i class="fas fa-user-plus"></i>
+                Register
+            </a>
+        {% endif %}
+    </div>
+</nav>

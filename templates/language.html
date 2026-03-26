@@ -1,0 +1,485 @@
+<!-- templates/language.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Select Language - AgriGuard</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        /* Additional styles for language page */
+        .language-container {
+            min-height: calc(100vh - 120px);
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .language-header {
+            text-align: center;
+            padding: 3rem 0 1rem;
+            background: linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%);
+            color: white;
+            border-radius: 0 0 30px 30px;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 20px rgba(46, 125, 50, 0.3);
+        }
+        
+        .language-header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .language-header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .language-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 2rem;
+            margin: 2rem 0;
+        }
+        
+        .language-option {
+            background: white;
+            border-radius: 16px;
+            padding: 2rem;
+            text-align: center;
+            border: 2px solid #e2e8f0;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .language-option::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: transparent;
+            transition: background 0.3s ease;
+        }
+        
+        .language-option:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15);
+            border-color: #2e7d32;
+        }
+        
+        .language-option.selected {
+            border-color: #2e7d32;
+            background: linear-gradient(135deg, #f8fff8 0%, #f0f9f0 100%);
+            box-shadow: 0 8px 25px rgba(46, 125, 50, 0.2);
+        }
+        
+        .language-option.selected::before {
+            background: linear-gradient(90deg, #2e7d32, #4caf50);
+        }
+        
+        .language-icon {
+            font-size: 3.5rem;
+            margin-bottom: 1.5rem;
+            color: #64748b;
+            transition: color 0.3s ease;
+        }
+        
+        .language-option:hover .language-icon {
+            color: #2e7d32;
+        }
+        
+        .language-option.selected .language-icon {
+            color: #2e7d32;
+        }
+        
+        .language-name {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #1a202c;
+        }
+        
+        .language-desc {
+            color: #64748b;
+            font-size: 0.95rem;
+            margin-bottom: 1rem;
+        }
+        
+        .language-note {
+            font-size: 0.85rem;
+            color: #94a3b8;
+            font-style: italic;
+        }
+        
+        .continue-section {
+            text-align: center;
+            margin: 3rem 0;
+            padding: 2rem;
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            border-radius: 20px;
+            border: 2px dashed #cbd5e1;
+        }
+        
+        .continue-btn {
+            padding: 1rem 3rem;
+            font-size: 1.1rem;
+            font-weight: 600;
+            background: linear-gradient(90deg, #2e7d32, #4caf50);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 6px 20px rgba(46, 125, 50, 0.3);
+        }
+        
+        .continue-btn:hover:not(:disabled) {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 25px rgba(46, 125, 50, 0.4);
+            background: linear-gradient(90deg, #1b5e20, #2e7d32);
+        }
+        
+        .continue-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .language-help {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            background: #e8f5e9;
+            padding: 1.5rem;
+            border-radius: 12px;
+            margin-top: 2rem;
+            border-left: 4px solid #2e7d32;
+        }
+        
+        .language-help i {
+            color: #2e7d32;
+            font-size: 1.5rem;
+        }
+        
+        .language-help p {
+            margin: 0;
+            color: #2e7d32;
+            font-weight: 500;
+        }
+        
+        /* Animation for selection */
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
+        .language-option.selected {
+            animation: pulse 0.5s ease;
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .language-header {
+                padding: 2rem 1rem;
+                border-radius: 0 0 20px 20px;
+            }
+            
+            .language-header h1 {
+                font-size: 2rem;
+            }
+            
+            .language-grid {
+                grid-template-columns: 1fr;
+                gap: 1.5rem;
+            }
+            
+            .continue-btn {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    {% include 'navbar.html' %}
+    
+    <div class="language-container">
+        <div class="language-header">
+            <h1><i class="fas fa-globe-asia"></i> Choose Your Language</h1>
+            <p>Select your preferred language for the best experience. The system will detect fraud in all supported languages.</p>
+        </div>
+        
+        <div class="main-container">
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-language"></i>
+                    <h2>Available Languages</h2>
+                </div>
+                
+                <p style="color: #64748b; margin-bottom: 2rem; text-align: center;">
+                    Select one language for interface display. Fraud detection works with all languages.
+                </p>
+                
+                <form method="POST" action="/language" id="languageForm">
+                    <div class="language-grid">
+                        <!-- English -->
+                        <div class="language-option" data-lang="en">
+                            <input type="radio" name="lang" value="en" id="lang-en" hidden>
+                            <div class="language-icon">
+                                <i class="fas fa-flag-usa"></i>
+                            </div>
+                            <h3 class="language-name">English</h3>
+                            <p class="language-desc">
+                                Default interface language with full support
+                            </p>
+                            <div class="language-note">
+                                Recommended for most users
+                            </div>
+                        </div>
+                        
+                        <!-- Hindi -->
+                        <div class="language-option" data-lang="hi">
+                            <input type="radio" name="lang" value="hi" id="lang-hi" hidden>
+                            <div class="language-icon">
+                                <i class="fas fa-flag"></i>
+                            </div>
+                            <h3 class="language-name">हिंदी</h3>
+                            <p class="language-desc">
+                                हिंदी इंटरफ़ेस के लिए चुनें
+                            </p>
+                            <div class="language-note">
+                                भारत की राष्ट्रीय भाषा
+                            </div>
+                        </div>
+                        
+                        <!-- Marathi -->
+                        <div class="language-option" data-lang="mr">
+                            <input type="radio" name="lang" value="mr" id="lang-mr" hidden>
+                            <div class="language-icon">
+                                <i class="fas fa-flag"></i>
+                            </div>
+                            <h3 class="language-name">मराठी</h3>
+                            <p class="language-desc">
+                                मराठी इंटरफेससाठी निवडा
+                            </p>
+                            <div class="language-note">
+                                महाराष्ट्र राज्य भाषा
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Continue Button Section -->
+                    <div class="continue-section">
+                        <div style="margin-bottom: 1.5rem;">
+                            <h3 style="color: #2e7d32; margin-bottom: 0.5rem;">
+                                <i class="fas fa-check-circle"></i> Ready to Continue?
+                            </h3>
+                            <p style="color: #64748b; max-width: 500px; margin: 0 auto;">
+                                Click continue after selecting your preferred language. You can change this anytime from your profile.
+                            </p>
+                        </div>
+                        
+                        <button type="submit" class="continue-btn" id="continueBtn" disabled>
+                            <i class="fas fa-arrow-right"></i>
+                            <span>Continue with Selected Language</span>
+                        </button>
+                        
+                        <p style="margin-top: 1rem; color: #94a3b8; font-size: 0.9rem;">
+                            <i class="fas fa-info-circle"></i>
+                            Language selection affects only interface display, not fraud detection capabilities
+                        </p>
+                    </div>
+                </form>
+                
+                <div class="language-help">
+                    <i class="fas fa-question-circle"></i>
+                    <p>
+                        <strong>Note:</strong> The fraud detection system automatically works with English, Hindi, and Marathi text regardless of your interface language choice.
+                    </p>
+                </div>
+            </div>
+            
+            <!-- Features Card -->
+            <div class="card" style="margin-top: 2rem;">
+                <div class="card-header">
+                    <i class="fas fa-star"></i>
+                    <h2>Why Language Matters</h2>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem;">
+                    <div style="text-align: center;">
+                        <div style="background: #e8f5e9; width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem;">
+                            <i class="fas fa-comments" style="color: #2e7d32; font-size: 1.5rem;"></i>
+                        </div>
+                        <h3 style="font-size: 1.1rem; margin-bottom: 0.5rem;">Easy Understanding</h3>
+                        <p style="color: #64748b; font-size: 0.9rem;">Comfortable navigation in your native language</p>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="background: #e8f5e9; width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem;">
+                            <i class="fas fa-search" style="color: #2e7d32; font-size: 1.5rem;"></i>
+                        </div>
+                        <h3 style="font-size: 1.1rem; margin-bottom: 0.5rem;">Better Detection</h3>
+                        <p style="color: #64748b; font-size: 0.9rem;">Detect fraud in regional language ads</p>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="background: #e8f5e9; width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem;">
+                            <i class="fas fa-users" style="color: #2e7d32; font-size: 1.5rem;"></i>
+                        </div>
+                        <h3 style="font-size: 1.1rem; margin-bottom: 0.5rem;">Farmer Friendly</h3>
+                        <p style="color: #64748b; font-size: 0.9rem;">Designed for Indian farmers' convenience</p>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="background: #e8f5e9; width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem;">
+                            <i class="fas fa-sync-alt" style="color: #2e7d32; font-size: 1.5rem;"></i>
+                        </div>
+                        <h3 style="font-size: 1.1rem; margin-bottom: 0.5rem;">Easy Switching</h3>
+                        <p style="color: #64748b; font-size: 0.9rem;">Change language anytime from profile</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Footer -->
+    <footer class="footer">
+        <p>© 2025 AgriGuard - Agricultural Fraud Detection System</p>
+        <p><i class="fas fa-language"></i> Supporting English, Hindi & Marathi | <i class="fas fa-shield-alt"></i> Protecting Farmers Nationwide</p>
+    </footer>
+    
+    <!-- JavaScript for language selection -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const languageOptions = document.querySelectorAll('.language-option');
+            const continueBtn = document.getElementById('continueBtn');
+            let selectedLanguage = null;
+            
+            // Check if there's a previously selected language
+            const savedLang = "{{ session.get('lang', '') }}";
+            if (savedLang) {
+                const option = document.querySelector(`.language-option[data-lang="${savedLang}"]`);
+                if (option) {
+                    selectLanguage(option);
+                }
+            }
+            
+            // Add click event to each language option
+            languageOptions.forEach(option => {
+                option.addEventListener('click', function() {
+                    selectLanguage(this);
+                });
+            });
+            
+            function selectLanguage(option) {
+                // Remove selected class from all options
+                languageOptions.forEach(opt => {
+                    opt.classList.remove('selected');
+                    const radio = opt.querySelector('input[type="radio"]');
+                    radio.checked = false;
+                });
+                
+                // Add selected class to clicked option
+                option.classList.add('selected');
+                const radio = option.querySelector('input[type="radio"]');
+                radio.checked = true;
+                
+                // Update selected language
+                selectedLanguage = option.getAttribute('data-lang');
+                
+                // Enable continue button
+                continueBtn.disabled = false;
+                continueBtn.innerHTML = `
+                    <i class="fas fa-arrow-right"></i>
+                    <span>Continue with ${getLanguageName(selectedLanguage)}</span>
+                `;
+                
+                // Add pulse animation
+                option.style.animation = 'none';
+                setTimeout(() => {
+                    option.style.animation = 'pulse 0.5s ease';
+                }, 10);
+            }
+            
+            function getLanguageName(langCode) {
+                const languages = {
+                    'en': 'English',
+                    'hi': 'हिंदी',
+                    'mr': 'मराठी'
+                };
+                return languages[langCode] || 'Selected Language';
+            }
+            
+            // Form submission with confirmation
+            document.getElementById('languageForm').addEventListener('submit', function(e) {
+                if (!selectedLanguage) {
+                    e.preventDefault();
+                    showToast('Please select a language first', 'error');
+                    return;
+                }
+                
+                // Show loading state
+                continueBtn.innerHTML = `
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <span>Setting language...</span>
+                `;
+                continueBtn.disabled = true;
+                
+                // Allow form to submit
+            });
+            
+            // Auto-select on hover after delay (for accessibility)
+            let hoverTimer;
+            languageOptions.forEach(option => {
+                option.addEventListener('mouseenter', function() {
+                    if (!this.classList.contains('selected')) {
+                        hoverTimer = setTimeout(() => {
+                            this.style.transform = 'translateY(-8px) scale(1.02)';
+                        }, 200);
+                    }
+                });
+                
+                option.addEventListener('mouseleave', function() {
+                    clearTimeout(hoverTimer);
+                    if (!this.classList.contains('selected')) {
+                        this.style.transform = 'translateY(0) scale(1)';
+                    }
+                });
+            });
+            
+            // Toast notification function
+            function showToast(message, type = 'info') {
+                const toast = document.createElement('div');
+                toast.className = `toast toast-${type}`;
+                toast.textContent = message;
+                toast.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    padding: 1rem 2rem;
+                    background: ${type === 'error' ? '#ef4444' : type === 'success' ? '#10b981' : '#3b82f6'};
+                    color: white;
+                    border-radius: 8px;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                    z-index: 9999;
+                    animation: slideInRight 0.3s ease;
+                `;
+                
+                document.body.appendChild(toast);
+                
+                setTimeout(() => {
+                    toast.style.animation = 'slideOutRight 0.3s ease';
+                    setTimeout(() => toast.remove(), 300);
+                }, 3000);
+            }
+        });
+    </script>
+</body>
+</html>

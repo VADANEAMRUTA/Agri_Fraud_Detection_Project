@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgriGuard - Choose Login Type</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            padding: 20px;
+        }
+        .login-card {
+            background: white;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: transform 0.3s;
+        }
+        .login-card:hover {
+            transform: translateY(-5px);
+        }
+        .login-header {
+            background: #1b5e20;
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .login-option {
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            border-bottom: 1px solid #eee;
+        }
+        .login-option:hover {
+            background: #f8f9fa;
+        }
+        .login-option:last-child {
+            border-bottom: none;
+        }
+        .login-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+        }
+        .btn-login {
+            padding: 12px 40px;
+            font-size: 1.1rem;
+            border-radius: 50px;
+            margin-top: 20px;
+        }
+        .welcome-text {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .welcome-text h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+        }
+        .welcome-text p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="welcome-text">
+            <h1>🌾 AgriGuard</h1>
+            <p>Protecting Farmers from Agricultural Fraud</p>
+        </div>
+        
+        <div class="row justify-content-center">
+            <div class="col-md-10 col-lg-8">
+                <div class="login-card">
+                    <div class="login-header">
+                        <h2>Welcome Back!</h2>
+                        <p>Please select your login type</p>
+                    </div>
+                    
+                    <div class="row g-0">
+                        <!-- Farmer Login -->
+                        <div class="col-md-6">
+                            <div class="login-option" onclick="selectLogin('farmer')" id="farmerOption">
+                                <div class="login-icon">👨‍🌾</div>
+                                <h3>Farmer / User</h3>
+                                <p class="text-muted">
+                                    Access fraud detection tools,<br>
+                                    check agricultural products,<br>
+                                    view your scan history
+                                </p>
+                                <button class="btn btn-success btn-login" onclick="window.location.href='/login'">
+                                    Login as Farmer
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Admin Login -->
+                        <div class="col-md-6">
+                            <div class="login-option" onclick="selectLogin('admin')" id="adminOption">
+                                <div class="login-icon">👑</div>
+                                <h3>Administrator</h3>
+                                <p class="text-muted">
+                                    Monitor system activity,<br>
+                                    manage users,<br>
+                                    view analytics & reports
+                                </p>
+                                <button class="btn btn-warning btn-login" onclick="window.location.href='/admin-login'">
+                                    Login as Admin
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="p-4 text-center border-top">
+                        <p class="text-muted mb-0">
+                            New user? <a href="/register" class="text-success">Register here</a>
+                        </p>
+                    </div>
+                </div>
+                
+                <div class="text-center mt-4 text-white">
+                    <small>© 2025 AgriGuard - Agricultural Fraud Detection System</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function selectLogin(type) {
+            // Visual feedback
+            document.getElementById('farmerOption').style.background = type === 'farmer' ? '#f8f9fa' : 'white';
+            document.getElementById('adminOption').style.background = type === 'admin' ? '#f8f9fa' : 'white';
+            
+            // Redirect after a short delay
+            setTimeout(() => {
+                if (type === 'farmer') {
+                    window.location.href = '/login';
+                } else {
+                    window.location.href = '/admin-login';
+                }
+            }, 300);
+        }
+    </script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

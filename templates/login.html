@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - AgriGuard</title>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        /* Additional styles specific to login page */
+        .login-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4edf5 100%);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .login-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #2e7d32, #4caf50);
+        }
+        
+        .login-wrapper {
+            display: flex;
+            width: 100%;
+            max-width: 1000px;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            animation: fadeInUp 0.6s ease;
+        }
+        
+        .login-left {
+            flex: 1;
+            background: linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%);
+            color: white;
+            padding: 4rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .login-left::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11 18c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm48 25c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm-43-7c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm63 31c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM34 90c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm56-76c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM12 86c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm28-65c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm23-11c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-6 60c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm29 22c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zM32 63c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm57-13c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-9-21c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM60 91c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM35 41c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM12 60c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2z' fill='%23ffffff' fill-opacity='0.1' fill-rule='evenodd'/%3E%3C/svg%3E");
+            opacity: 0.1;
+        }
+        
+        .login-right {
+            flex: 1.2;
+            padding: 4rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 2rem;
+            font-size: 2.5rem;
+            font-weight: 700;
+        }
+        
+        .logo i {
+            font-size: 3rem;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 20px;
+            border-radius: 50%;
+        }
+        
+        .tagline {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            margin-bottom: 3rem;
+            line-height: 1.6;
+        }
+        
+        .features-list {
+            list-style: none;
+            padding: 0;
+            margin-top: 2rem;
+        }
+        
+        .features-list li {
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1rem;
+        }
+        
+        .features-list i {
+            color: #a5d6a7;
+        }
+        
+        .login-form {
+            width: 100%;
+            max-width: 400px;
+            margin: 0 auto;
+        }
+        
+        .form-title {
+            font-size: 2rem;
+            color: #1a202c;
+            margin-bottom: 0.5rem;
+        }
+        
+        .form-subtitle {
+            color: #64748b;
+            margin-bottom: 2rem;
+        }
+        
+        .input-with-icon {
+            position: relative;
+            margin-bottom: 1.5rem;
+        }
+        
+        .input-with-icon i {
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #64748b;
+            font-size: 1.2rem;
+        }
+        
+        .input-with-icon input {
+            padding-left: 45px;
+            width: 100%;
+            height: 50px;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+        
+        .input-with-icon input:focus {
+            outline: none;
+            border-color: #4caf50;
+            box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
+        }
+        
+        .remember-forgot {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+        
+        .remember-me {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+        }
+        
+        .remember-me input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+        
+        .forgot-password {
+            color: #2e7d32;
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s ease;
+        }
+        
+        .forgot-password:hover {
+            color: #1b5e20;
+            text-decoration: underline;
+        }
+        
+        .login-btn {
+            width: 100%;
+            padding: 15px;
+            font-size: 1.1rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            background: linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .login-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(46, 125, 50, 0.2);
+        }
+        
+        .divider {
+            display: flex;
+            align-items: center;
+            margin: 2rem 0;
+            color: #94a3b8;
+        }
+        
+        .divider::before,
+        .divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: #e2e8f0;
+        }
+        
+        .divider span {
+            padding: 0 1rem;
+            font-size: 0.9rem;
+        }
+        
+        .social-login {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        
+        .social-btn {
+            padding: 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            background: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .social-btn:hover {
+            background: #f8fafc;
+            border-color: #cbd5e1;
+        }
+        
+        .register-link {
+            text-align: center;
+            margin-top: 2rem;
+            color: #64748b;
+        }
+        
+        .register-link a {
+            color: #2e7d32;
+            font-weight: 600;
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+        
+        .register-link a:hover {
+            color: #1b5e20;
+            text-decoration: underline;
+        }
+        
+        /* Flash message styling */
+        .alert-container {
+            margin-bottom: 1.5rem;
+        }
+        
+        .alert {
+            padding: 12px 20px;
+            border-radius: 10px;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: slideIn 0.3s ease;
+        }
+        
+        .alert-success {
+            background: #d1fae5;
+            color: #065f46;
+            border-left: 4px solid #10b981;
+        }
+        
+        .alert-error {
+            background: #fee2e2;
+            color: #991b1b;
+            border-left: 4px solid #ef4444;
+        }
+        
+        .alert-warning {
+            background: #fef3c7;
+            color: #92400e;
+            border-left: 4px solid #f59e0b;
+        }
+        
+        .alert-info {
+            background: #e0f2fe;
+            color: #075985;
+            border-left: 4px solid #0ea5e9;
+        }
+        
+        .demo-credentials {
+            margin-top: 2rem;
+            padding: 1rem;
+            background: #f1f5f9;
+            border-radius: 10px;
+            font-size: 0.9rem;
+        }
+        
+        .demo-text {
+            font-family: 'Courier New', monospace;
+            color: #2e7d32;
+            font-weight: 600;
+        }
+        
+        .auto-fill-btn {
+            padding: 5px 15px;
+            font-size: 0.8rem;
+            background: white;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .auto-fill-btn:hover {
+            background: #f8fafc;
+            border-color: #94a3b8;
+        }
+        
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .login-wrapper {
+                flex-direction: column;
+            }
+            
+            .login-left,
+            .login-right {
+                padding: 2rem;
+            }
+            
+            .logo {
+                font-size: 2rem;
+            }
+            
+            .logo i {
+                font-size: 2.5rem;
+                padding: 15px;
+            }
+        }
+        
+        /* Floating animation */
+        .floating-icons {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+        }
+        
+        .floating-icon {
+            position: absolute;
+            color: rgba(255, 255, 255, 0.3);
+            animation: float 6s ease-in-out infinite;
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            50% { transform: translateY(-20px) rotate(10deg); }
+        }
+        
+        /* Toast notification */
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 1rem 2rem;
+            background: #10b981;
+            color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 9999;
+            animation: slideInRight 0.3s ease;
+        }
+        
+        @keyframes slideInRight {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        @keyframes slideOutRight {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-wrapper">
+            <!-- Left Side - Branding & Info -->
+            <div class="login-left">
+                <!-- Floating Icons -->
+                <div class="floating-icons">
+                    <div class="floating-icon" style="top: 10%; left: 10%; font-size: 2rem;">
+                        <i class="fas fa-seedling"></i>
+                    </div>
+                    <div class="floating-icon" style="top: 20%; right: 15%; font-size: 1.5rem;">
+                        <i class="fas fa-tractor"></i>
+                    </div>
+                    <div class="floating-icon" style="bottom: 30%; left: 15%; font-size: 2rem;">
+                        <i class="fas fa-shield-alt"></i>
+                    </div>
+                    <div class="floating-icon" style="bottom: 20%; right: 10%; font-size: 1.5rem;">
+                        <i class="fas fa-leaf"></i>
+                    </div>
+                </div>
+                
+                <div class="logo">
+                    <i class="fas fa-shield-alt"></i>
+                    <div>
+                        <div>AgriGuard</div>
+                        <div style="font-size: 1rem; opacity: 0.8;">Protecting Farmers</div>
+                    </div>
+                </div>
+                
+                <p class="tagline">
+                    Your trusted partner in detecting agricultural fraud on social media.
+                    Upload ads, check authenticity, and stay protected from scams.
+                </p>
+                
+                <ul class="features-list">
+                    <li><i class="fas fa-check-circle"></i> <strong>Real-time Fraud Detection</strong></li>
+                    <li><i class="fas fa-check-circle"></i> <strong>Multi-language Support</strong> (EN/HI/MR)</li>
+                    <li><i class="fas fa-check-circle"></i> <strong>Image & Text Analysis</strong></li>
+                    <li><i class="fas fa-check-circle"></i> <strong>100% Free for Farmers</strong></li>
+                    <li><i class="fas fa-check-circle"></i> <strong>Secure & Private</strong></li>
+                </ul>
+                
+                <div style="margin-top: 3rem; padding-top: 2rem; border-top: 1px solid rgba(255, 255, 255, 0.2);">
+                    <p style="font-size: 0.9rem; opacity: 0.8;">
+                        <i class="fas fa-info-circle"></i> 
+                        Trusted by 10,000+ farmers across India
+                    </p>
+                </div>
+            </div>
+            
+            <!-- Right Side - Login Form -->
+            <div class="login-right">
+                <div class="login-form">
+                    <h2 class="form-title">Welcome Back!</h2>
+                    <p class="form-subtitle">Sign in to your account to continue</p>
+                    
+                    <!-- Flash Messages -->
+                    <div class="alert-container">
+                        {% with messages = get_flashed_messages(with_categories=true) %}
+                            {% if messages %}
+                                {% for category, message in messages %}
+                                    {% if 'Debug:' not in message and 'Reset link' not in message %}
+                                        <div class="alert alert-{{ 'success' if category == 'success' else 'error' if category == 'error' else 'warning' if category == 'warning' else 'info' }}">
+                                            <i class="fas fa-{{ 'check-circle' if category == 'success' else 'exclamation-circle' if category == 'error' else 'exclamation-triangle' if category == 'warning' else 'info-circle' }}"></i>
+                                            {{ message }}
+                                        </div>
+                                    {% endif %}
+                                {% endfor %}
+                            {% endif %}
+                        {% endwith %}
+                    </div>
+                    
+                    <form method="POST" action="/login">
+                        <div class="input-with-icon">
+                            <i class="fas fa-user"></i>
+                            <input type="text" 
+                                   name="identifier" 
+                                   class="form-input" 
+                                   placeholder="Username, Email or Mobile Number" 
+                                   required
+                                   autofocus>
+                        </div>
+                        
+                        <div class="input-with-icon">
+                            <i class="fas fa-lock"></i>
+                            <input type="password" 
+                                   name="password" 
+                                   class="form-input" 
+                                   placeholder="Password" 
+                                   required>
+                        </div>
+                        
+                        <!-- UPDATED: Fixed Forgot Password Link -->
+                        <div class="remember-forgot">
+                            <label class="remember-me">
+                                <input type="checkbox" name="remember">
+                                <span>Remember me</span>
+                            </label>
+                            <!-- Check if forgot_password route exists, otherwise use direct link -->
+                            {% if url_for('forgot_password', _external=False) != '/forgot_password' %}
+                                <a href="{{ url_for('forgot_password') }}" class="forgot-password">
+                                    <i class="fas fa-question-circle"></i> Forgot Password?
+                                </a>
+                            {% else %}
+                                <a href="/reset-password" class="forgot-password">
+                                    <i class="fas fa-question-circle"></i> Forgot Password?
+                                </a>
+                            {% endif %}
+                        </div>
+                        
+                        <button type="submit" class="login-btn">
+                            <i class="fas fa-sign-in-alt"></i>
+                            Sign In
+                        </button>
+                    </form>
+                    
+                    
+                    
+                    <div class="register-link">
+                        Don't have an account? 
+                        <a href="/register">Create an account</a>
+                    </div>
+                    
+                    <!-- Demo Credentials -->
+                    <div class="demo-credentials">
+                        <p style="margin-bottom: 0.5rem; color: #64748b;">
+                            <i class="fas fa-info-circle"></i> 
+                            <strong>Demo Credentials:</strong>
+                        </p>
+                        <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
+                            <div style="flex: 1; min-width: 200px;">
+                                <p style="margin: 0;" class="demo-text">
+                                    Username: <strong>farmer123</strong>
+                                </p>
+                                <p style="margin: 0;" class="demo-text">
+                                    Password: <strong>password123</strong>
+                                </p>
+                            </div>
+                            <button type="button" class="auto-fill-btn" onclick="fillDemoCredentials()">
+                                <i class="fas fa-magic"></i> Auto-fill
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function fillDemoCredentials() {
+            document.querySelector('input[name="identifier"]').value = 'farmer123';
+            document.querySelector('input[name="password"]').value = 'password123';
+            
+            // Show success message
+            showToast('Demo credentials filled!', 'success');
+        }
+        
+        function showToast(message, type = 'info') {
+            // Remove existing toast if any
+            const existingToast = document.querySelector('.toast');
+            if (existingToast) {
+                existingToast.remove();
+            }
+            
+            // Create new toast
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.textContent = message;
+            
+            // Set background color based on type
+            if (type === 'success') {
+                toast.style.background = '#10b981';
+            } else if (type === 'error') {
+                toast.style.background = '#ef4444';
+            } else if (type === 'warning') {
+                toast.style.background = '#f59e0b';
+            } else {
+                toast.style.background = '#3b82f6';
+            }
+            
+            document.body.appendChild(toast);
+            
+            // Auto remove after 3 seconds
+            setTimeout(() => {
+                toast.style.animation = 'slideOutRight 0.3s ease';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+        
+        // Add focus animations to inputs
+        document.querySelectorAll('.input-with-icon input').forEach(input => {
+            input.addEventListener('focus', function() {
+                this.parentElement.style.transform = 'scale(1.02)';
+            });
+            
+            input.addEventListener('blur', function() {
+                this.parentElement.style.transform = 'scale(1)';
+            });
+        });
+        
+        // Auto-hide flash messages after 5 seconds
+        setTimeout(() => {
+            const alerts = document.querySelectorAll('.alert');
+            alerts.forEach(alert => {
+                alert.style.opacity = '0';
+                alert.style.transition = 'opacity 0.5s ease';
+                setTimeout(() => alert.remove(), 500);
+            });
+        }, 5000);
+        
+        // Add form validation
+        const loginForm = document.querySelector('form[action="/login"]');
+        if (loginForm) {
+            loginForm.addEventListener('submit', function(e) {
+                const identifier = this.querySelector('input[name="identifier"]').value.trim();
+                const password = this.querySelector('input[name="password"]').value.trim();
+                
+                if (!identifier) {
+                    e.preventDefault();
+                    showToast('Please enter username, email or mobile number', 'error');
+                    return false;
+                }
+                
+                if (!password) {
+                    e.preventDefault();
+                    showToast('Please enter your password', 'error');
+                    return false;
+                }
+                
+                return true;
+            });
+        }
+        
+        // Add enter key support
+        document.querySelectorAll('.input-with-icon input').forEach(input => {
+            input.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (input.name === 'identifier') {
+                        document.querySelector('input[name="password"]').focus();
+                    } else if (input.name === 'password') {
+                        document.querySelector('.login-btn').click();
+                    }
+                }
+            });
+        });
+        
+        // Remember me functionality
+        document.querySelector('input[name="remember"]').addEventListener('change', function() {
+            if (this.checked) {
+                showToast('Your login will be remembered for 30 days', 'info');
+            }
+        });
+    </script>
+    
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

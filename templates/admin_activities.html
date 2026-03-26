@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - User Activities | AgriGuard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .admin-container {
+            padding: 20px;
+        }
+        .table-container {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+            color: #333;
+        }
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+        .type-badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .type-auth {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .type-scan {
+            background-color: #cce5ff;
+            color: #004085;
+        }
+        .type-profile {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        .type-settings {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+        .btn {
+            display: inline-block;
+            padding: 8px 16px;
+            background-color: #3498db;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .btn-back {
+            background-color: #6c757d;
+        }
+        .pagination {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+            gap: 10px;
+        }
+    </style>
+</head>
+<body>
+    {% include 'admin_navbar.html' %}
+    
+    <div class="admin-container">
+        <h1>User Activity Logs</h1>
+        <p>Total Activities: {{ activities|length }}</p>
+        
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>User</th>
+                        <th>Action</th>
+                        <th>Details</th>
+                        <th>Type</th>
+                        <th>Timestamp</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for activity in activities %}
+                    <tr>
+                        <td>{{ activity.id }}</td>
+                        <td>{{ activity.username if activity.username else "User #" + activity.user_id|string }}</td>
+                        <td>{{ activity.action }}</td>
+                        <td>{{ activity.details[:100] }}{% if activity.details|length > 100 %}...{% endif %}</td>
+                        <td>
+                            <span class="type-badge type-{{ activity.type }}">
+                                {{ activity.type }}
+                            </span>
+                        </td>
+                        <td>{{ activity.timestamp }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            
+            <div class="pagination">
+                <a href="{{ url_for('admin_activities') }}" class="btn">Refresh</a>
+                <a href="{{ url_for('admin_dashboard') }}" class="btn btn-back">Back to Dashboard</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

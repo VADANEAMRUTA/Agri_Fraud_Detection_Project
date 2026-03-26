@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contact - AgriGuard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+        .navbar {
+            background-color: #28a745;
+        }
+        .contact-header {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            padding: 60px 0;
+            margin-bottom: 40px;
+        }
+        .contact-form {
+            background: white;
+            border-radius: 10px;
+            padding: 40px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            margin-bottom: 40px;
+        }
+        .form-control:focus {
+            border-color: #28a745;
+            box-shadow: 0 0 0 0.25rem rgba(40, 167, 69, 0.25);
+        }
+        .btn-success {
+            background-color: #28a745;
+            border-color: #28a745;
+            padding: 12px 30px;
+            font-weight: 600;
+        }
+        .btn-success:hover {
+            background-color: #218838;
+            border-color: #1e7e34;
+        }
+        .contact-info {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 30px;
+            margin-bottom: 20px;
+            height: auto;
+        }
+        .contact-icon {
+            font-size: 2rem;
+            color: #28a745;
+            margin-bottom: 15px;
+        }
+        .main-content {
+            flex: 1;
+        }
+        footer {
+            margin-top: auto;
+        }
+        .contact-container {
+            padding-bottom: 40px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <img src="/static/logo.png" alt="AgriGuard" height="40" class="d-inline-block align-top">
+                AgriGuard
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/about">About</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/contact">Contact</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Contact Header -->
+    <div class="contact-header text-center">
+        <div class="container">
+            <h1 class="display-4 fw-bold">Contact Us</h1>
+            <p class="lead">Have questions? We're here to help!</p>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div class="container contact-container">
+            <div class="row g-5">
+                <!-- Contact Information Column -->
+                <div class="col-lg-4">
+                    <!-- Support Hours -->
+                    <div class="contact-info">
+                        <div class="contact-icon">🕒</div>
+                        <h4>Support Hours</h4>
+                        <p class="mb-2">
+                            <strong>Monday - Friday:</strong><br>
+                            9:00 AM - 6:00 PM (IST)
+                        </p>
+                        <p class="mb-2">
+                            <strong>Saturday:</strong><br>
+                            10:00 AM - 4:00 PM (IST)
+                        </p>
+                        <p class="mb-0 text-muted">
+                            <small>Closed on Sundays and public holidays</small>
+                        </p>
+                    </div>
+                    
+                    <!-- Phone Numbers -->
+                    <div class="contact-info">
+                        <div class="contact-icon">📞</div>
+                        <h4>Phone Support</h4>
+                        <p class="mb-2">
+                            <strong>Customer Support:</strong><br>
+                            +91 8767300868
+                        </p>
+                        <p class="mb-0">
+                            <strong>Technical Support:</strong><br>
+                            +91 8767300868
+                        </p>
+                    </div>
+                    
+                    <!-- Email Addresses -->
+                    <div class="contact-info">
+                        <div class="contact-icon">✉️</div>
+                        <h4>Email Support</h4>
+                        <p class="mb-2">
+                            <strong>General Inquiries:</strong><br>
+                            info@agriguard.com
+                        </p>
+                        <p class="mb-2">
+                            <strong>Technical Support:</strong><br>
+                            support@agriguard.com
+                        </p>
+                        <p class="mb-0">
+                            <strong>Fraud Reports:</strong><br>
+                            reports@agriguard.com
+                        </p>
+                    </div>
+                    
+                    <!-- Emergency Contact -->
+                    <div class="contact-info bg-warning bg-opacity-10 border-warning">
+                        <div class="contact-icon">🚨</div>
+                        <h4>Emergency Fraud Reporting</h4>
+                        <p class="mb-2">
+                            <strong>24/7 Hotline:</strong><br>
+                            +91 8767300868
+                        </p>
+                        <p class="mb-0 text-muted">
+                            <small>For urgent fraud cases requiring immediate attention</small>
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Contact Form Column -->
+                <div class="col-lg-8">
+                    <div class="contact-form">
+                        <h3 class="mb-4">Send us a Message</h3>
+                        <p class="text-muted mb-4">Fill out the form below and we'll get back to you within 24 hours.</p>
+                        
+                        <form id="contactForm" action="/submit-contact" method="POST">
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label for="firstName" class="form-label">First Name *</label>
+                                    <input type="text" class="form-control" id="firstName" name="firstName" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="lastName" class="form-label">Last Name *</label>
+                                    <input type="text" class="form-control" id="lastName" name="lastName" required>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="email" class="form-label">Email Address *</label>
+                                <input type="email" class="form-control" id="email" name="email" required>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="phone" class="form-label">Phone Number</label>
+                                <input type="tel" class="form-control" id="phone" name="phone" placeholder="+91 XXXXX XXXXX">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="subject" class="form-label">Subject *</label>
+                                <select class="form-select" id="subject" name="subject" required>
+                                    <option value="" selected disabled>Select a subject</option>
+                                    <option value="general">General Inquiry</option>
+                                    <option value="report">Report Fraudulent Ad</option>
+                                    <option value="technical">Technical Support</option>
+                                    <option value="feedback">Feedback/Suggestions</option>
+                                    <option value="partnership">Partnership Opportunity</option>
+                                    <option value="press">Press/Media Inquiry</option>
+                                    <option value="other">Other</option>
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="urgency" class="form-label">Urgency Level</label>
+                                <select class="form-select" id="urgency" name="urgency">
+                                    <option value="low" selected>Low - General inquiry</option>
+                                    <option value="medium">Medium - Need assistance</option>
+                                    <option value="high">High - Urgent fraud report</option>
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="message" class="form-label">Message *</label>
+                                <textarea class="form-control" id="message" name="message" rows="6" required 
+                                          placeholder="Please provide details about your inquiry..."></textarea>
+                            </div>
+                            
+                            <div class="mb-4">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="newsletter" name="newsletter">
+                                    <label class="form-check-label" for="newsletter">
+                                        Subscribe to our newsletter for fraud alerts and updates
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="terms" name="terms" required>
+                                    <label class="form-check-label" for="terms">
+                                        I agree to the <a href="#" data-bs-toggle="modal" data-bs-target="#termsModal">Terms & Conditions</a> *
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-success btn-lg">
+                                    <span class="me-2">📤</span> Send Message
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FAQ Section -->
+            <div class="row mt-5">
+                <div class="col-12">
+                    <h3 class="text-center mb-4">Frequently Asked Questions</h3>
+                    <div class="accordion" id="faqAccordion">
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#faq1">
+                                    How quickly will I receive a response?
+                                </button>
+                            </h2>
+                            <div id="faq1" class="accordion-collapse collapse show" data-bs-parent="#faqAccordion">
+                                <div class="accordion-body">
+                                    We typically respond within <strong>24-48 hours</strong> during business days. Urgent fraud reports are prioritized and may receive a response within <strong>4-6 hours</strong>.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq2">
+                                    What information should I include when reporting fraud?
+                                </button>
+                            </h2>
+                            <div id="faq2" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                                <div class="accordion-body">
+                                    Please include: 
+                                    <ol>
+                                        <li>The advertisement text or image</li>
+                                        <li>Where you saw it (website, social media, etc.)</li>
+                                        <li>Date and time</li>
+                                        <li>Any contact information provided</li>
+                                        <li>Why you suspect it's fraudulent</li>
+                                    </ol>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq3">
+                                    Can I remain anonymous when reporting?
+                                </button>
+                            </h2>
+                            <div id="faq3" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                                <div class="accordion-body">
+                                    <strong>Yes, you can report fraud anonymously.</strong> However, providing your contact information helps us follow up if we need more details for investigation. All reports are kept confidential.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq4">
+                                    Do you offer services in regional languages?
+                                </button>
+                            </h2>
+                            <div id="faq4" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                                <div class="accordion-body">
+                                    Yes! AgriGuard supports <strong>English, Hindi, and Marathi</strong>. You can submit reports and communicate with our team in any of these languages.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-dark text-white py-4 mt-5">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-md-6 text-center text-md-start mb-3 mb-md-0">
+                    <h5 class="mb-2">AgriGuard</h5>
+                    <p class="mb-0 text-white-50">Your trusted partner in agricultural fraud detection</p>
+                </div>
+                <div class="col-md-6 text-center text-md-end">
+                    <p class="mb-2">&copy; 2025 AgriGuard. All rights reserved.</p>
+                    <p class="mb-0">
+                        <a href="/privacy" class="text-white text-decoration-none me-3">Privacy Policy</a>
+                        <a href="/terms" class="text-white text-decoration-none">Terms of Service</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Terms Modal -->
+    <div class="modal fade" id="termsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Terms & Conditions</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <h6>Data Usage Policy</h6>
+                    <p>By submitting this form, you agree that AgriGuard may use your contact information to respond to your inquiry. We will not share your information with third parties without your consent.</p>
+                    
+                    <h6>Fraud Reporting</h6>
+                    <p>When reporting fraud, please ensure you have legitimate suspicion. False reporting may result in account suspension.</p>
+                    
+                    <h6>Communication</h6>
+                    <p>You agree to receive communications from AgriGuard regarding your inquiry and, if opted in, our newsletter.</p>
+                    
+                    <h6>Confidentiality</h6>
+                    <p>All fraud reports are treated with strict confidentiality. We do not disclose reporter information unless required by law.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-success" data-bs-dismiss="modal">I Understand</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Form validation and submission
+        document.getElementById('contactForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Get form data
+            const formData = new FormData(this);
+            const data = Object.fromEntries(formData.entries());
+            
+            // Validation
+            if (!data.firstName || !data.lastName || !data.email || !data.subject || !data.message) {
+                alert('Please fill in all required fields (marked with *).');
+                return;
+            }
+            
+            // Email validation
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(data.email)) {
+                alert('Please enter a valid email address.');
+                return;
+            }
+            
+            // Terms check
+            if (!document.getElementById('terms').checked) {
+                alert('You must agree to the Terms & Conditions.');
+                return;
+            }
+            
+            // Show loading state
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Sending...';
+            submitBtn.disabled = true;
+            
+            // Form submission (to your Flask route)
+            fetch('/submit-contact', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (response.ok) {
+                    return response.text();
+                }
+                throw new Error('Network response was not ok.');
+            })
+            .then(() => {
+                alert('Thank you for your message! We will get back to you within 24 hours.');
+                this.reset();
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('There was an error submitting your message. Please try again.');
+            })
+            .finally(() => {
+                submitBtn.innerHTML = originalText;
+                submitBtn.disabled = false;
+            });
+        });
+        
+        // Auto-hide alert after 5 seconds
+        setTimeout(() => {
+            const alerts = document.querySelectorAll('.alert');
+            alerts.forEach(alert => {
+                const bsAlert = new bootstrap.Alert(alert);
+                bsAlert.close();
+            });
+        }, 5000);
+    </script>
+</body>
+</html>

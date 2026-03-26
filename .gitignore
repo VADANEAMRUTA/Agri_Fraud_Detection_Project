@@ -1,0 +1,15 @@
+node_modules/
+venv/
+__pycache__/
+*.log
+.env
+dist/
+build/
+*.csv
+*.json
+*.zip
+*.mp4
+*.png
+*.jpg
+*.pkl
+*.h5

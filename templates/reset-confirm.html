@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Set New Password - AgriGuard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #f0fff4 0%, #e6fffa 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .reset-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0, 100, 0, 0.1);
+            width: 100%;
+            max-width: 500px;
+            padding: 50px;
+            border-top: 5px solid #2e7d32;
+        }
+        
+        .logo {
+            font-size: 32px;
+            font-weight: 800;
+            color: #2e7d32;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        
+        .tagline {
+            color: #1b5e20;
+            font-size: 14px;
+            font-weight: 500;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .instruction {
+            color: #666;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 18px;
+            font-weight: 500;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+            font-size: 14px;
+        }
+        
+        input[type="password"] {
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid #c8e6c9;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: all 0.3s;
+            background: #f9f9f9;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: #2e7d32;
+            background: white;
+            box-shadow: 0 0 0 3px rgba(46, 125, 50, 0.1);
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 20px;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(46, 125, 50, 0.3);
+        }
+        
+        .error {
+            color: #e53935;
+            font-size: 14px;
+            margin-top: 5px;
+            display: none;
+        }
+        
+        .success {
+            background: #e8f5e9;
+            color: #1b5e20;
+            padding: 20px;
+            border-radius: 12px;
+            margin-top: 20px;
+            border-left: 4px solid #4caf50;
+            text-align: center;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="reset-container">
+        <div class="logo">AgriGuard</div>
+        <div class="tagline">Protecting Farmers</div>
+        
+        <div class="instruction">Set Your New Password</div>
+        
+        <div class="form-group">
+            <label for="new-password">New Password</label>
+            <input type="password" id="new-password" placeholder="Enter new password">
+            <div class="error" id="pass-error">Password must be at least 8 characters</div>
+        </div>
+        
+        <div class="form-group">
+            <label for="confirm-password">Confirm Password</label>
+            <input type="password" id="confirm-password" placeholder="Confirm new password">
+            <div class="error" id="confirm-error">Passwords do not match</div>
+        </div>
+        
+        <button class="btn" onclick="resetPassword()">Reset Password</button>
+        
+        <div class="success" id="success-message">
+            ✅ Password reset successful!<br>
+            <small>Redirecting to login...</small>
+        </div>
+    </div>
+
+    <script>
+        function validatePassword(password) {
+            return password.length >= 8;
+        }
+        
+        function resetPassword() {
+            const newPass = document.getElementById('new-password').value;
+            const confirmPass = document.getElementById('confirm-password').value;
+            const passError = document.getElementById('pass-error');
+            const confirmError = document.getElementById('confirm-error');
+            
+            // Reset errors
+            passError.style.display = 'none';
+            confirmError.style.display = 'none';
+            
+            // Validate
+            let valid = true;
+            
+            if (!validatePassword(newPass)) {
+                passError.style.display = 'block';
+                valid = false;
+            }
+            
+            if (newPass !== confirmPass) {
+                confirmError.style.display = 'block';
+                valid = false;
+            }
+            
+            if (!valid) return;
+            
+            // Get token from URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const token = urlParams.get('token');
+            const email = urlParams.get('email');
+            
+            console.log('AgriGuard: Resetting password for:', { email, token });
+            
+            // In real app: Call your API
+            // fetch('https://api.agriguard.com/auth/reset-password-confirm', {
+            //     method: 'POST',
+            //     body: JSON.stringify({ token, password: newPass })
+            // });
+            
+            // Show success
+            document.getElementById('success-message').style.display = 'block';
+            
+            // Redirect after 2 seconds
+            setTimeout(() => {
+                window.location.href = 'login.html';
+            }, 2000);
+        }
+        
+        // Enter key support
+        document.getElementById('confirm-password').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                resetPassword();
+            }
+        });
+    </script>
+</body>
+</html>

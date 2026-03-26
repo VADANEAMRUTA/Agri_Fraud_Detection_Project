@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Check Fraud - AgriGuard</title>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Bootstrap 5 CSS (for progress bars and badges) -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Google Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    {% include 'navbar.html' %}
+    
+    <div class="main-container">
+        <div class="dashboard-header fade-in">
+            <h1><i class="fas fa-search"></i> Fraud Detection</h1>
+            <p>Upload advertisement image, paste text, or enter link to check for fraud</p>
+        </div>
+        
+        <div class="card fade-in">
+            <div class="card-header">
+                <i class="fas fa-bullseye"></i>
+                <h2>Select Input Method</h2>
+            </div>
+            
+            <div class="input-tabs">
+                <button class="tab-btn active" data-tab="image">
+                    <i class="fas fa-image"></i> Upload Image
+                </button>
+                <button class="tab-btn" data-tab="text">
+                    <i class="fas fa-font"></i> Paste Text
+                </button>
+                <button class="tab-btn" data-tab="link">
+                    <i class="fas fa-link"></i> Enter Link
+                </button>
+            </div>
+            
+            <form id="detectForm" method="POST" action="/detect" enctype="multipart/form-data">
+                <!-- Image Upload Tab -->
+                <div class="tab-content active" id="image-tab">
+                    <div class="upload-area">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                        <h3>Drag & Drop Advertisement Image</h3>
+                        <p>or click to browse (JPG, PNG, GIF)</p>
+                        <p id="preview-text" class="text-muted">No file chosen</p>
+                        <input type="file" name="image" id="image-upload" class="file-input" accept="image/*">
+                    </div>
+                </div>
+                
+                <!-- Text Input Tab -->
+                <div class="tab-content" id="text-tab">
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i class="fas fa-align-left"></i>
+                            Advertisement Text
+                        </label>
+                        <textarea name="text" id="textInput" class="form-textarea" 
+                                  placeholder="Paste the advertisement text here...">{{ text_value if text_value else '' }}</textarea>
+                    </div>
+                </div>
+                
+                <!-- Link Input Tab -->
+                <div class="tab-content" id="link-tab">
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i class="fas fa-external-link-alt"></i>
+                            Advertisement Link
+                        </label>
+                        <input type="url" name="link" id="linkInput" class="form-input" 
+                               placeholder="https://example.com/fake-advertisement">
+                    </div>
+                </div>
+                
+                <div class="btn-group">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-search"></i> Check for Fraud
+                    </button>
+                    <button type="button" class="btn btn-outline" onclick="clearForm()">
+                        <i class="fas fa-redo"></i> Clear
+                    </button>
+                </div>
+            </form>
+        </div>
+        
+        <!-- Results Section -->
+        <div id="results" class="mt-4">
+            {% if result %}
+            <div class="result-card fade-in">
+                <div class="result-icon">
+                    {% if 'Genuine' in result or 'Safe' in result %}
+                        <i class="fas fa-check-circle" style="color: #10b981;"></i>
+                    {% elif 'Fraud' in result %}
+                        <i class="fas fa-exclamation-triangle" style="color: #ef4444;"></i>
+                    {% else %}
+                        <i class="fas fa-question-circle" style="color: #f59e0b;"></i>
+                    {% endif %}
+                </div>
+                
+                <h2 class="result-title">{{ result }}</h2>
+                
+                {% if confidence > 0 %}
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between">
+                        <span>Confidence:</span>
+                        <span><strong>{{ confidence|round(1) }}%</strong></span>
+                    </div>
+                    <div class="progress" style="height: 20px;">
+                        <div class="progress-bar 
+                            {% if confidence >= 70 %}bg-success
+                            {% elif confidence >= 40 %}bg-warning
+                            {% else %}bg-danger{% endif %}" 
+                            style="width: {{ confidence }}%">
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% if content %}
+                <div class="form-group">
+                    <label class="form-label">
+                        <i class="fas fa-file-alt"></i>
+                        Extracted Content
+                    </label>
+                    <div class="result-content">
+                        {% if highlighted_content %}
+                            {{ highlighted_content|safe }}
+                        {% else %}
+                            {{ content }}
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+                
+                <div class="btn-group" style="margin-top: 2rem;">
+                    <a href="/detect" class="btn btn-secondary">
+                        <i class="fas fa-redo"></i> Check Another
+                    </a>
+                    <button class="btn btn-outline" onclick="window.print()">
+                        <i class="fas fa-print"></i> Print Result
+                    </button>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        
+        <!-- Add to detect.html -->
+<div class="result-section">
+    <h3>Detection Results</h3>
+    
+    <div class="result-card">
+        <div class="result-header">
+            <span class="result-text">{{ result }}</span>
+            <span class="confidence-badge">{{ confidence }}%</span>
+        </div>
+        
+        <div class="method-indicator">
+            <small>Method: {{ detection_method }}</small>
+        </div>
+        
+        {% if ml_explanation %}
+        <div class="ml-explanation">
+            <h4>🤖 AI Explanation:</h4>
+            <p>Model focused on these keywords:</p>
+            <ul>
+                {% for item in ml_explanation %}
+                <li>
+                    <strong>{{ item.feature }}</strong> 
+                    (weight: {{ "%.3f"|format(item.weight) }})
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+        <!-- Enhanced Results Section (for AJAX calls) -->
+        <div id="enhancedResults" class="card mt-4" style="display: none;">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">AI-Powered Analysis</h5>
+            </div>
+            <div class="card-body">
+                <div id="enhancedResultContent">
+                    <!-- Results will be loaded here via AJAX -->
+                </div>
+            </div>
+        </div>
+        
+        <div class="card fade-in">
+            <div class="card-header">
+                <i class="fas fa-lightbulb"></i>
+                <h2>Tips for Better Detection</h2>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem;">
+                <div>
+                    <h3><i class="fas fa-camera text-success"></i> Clear Images</h3>
+                    <p>Use high-quality screenshots with readable text</p>
+                </div>
+                <div>
+                    <h3><i class="fas fa-language text-success"></i> Multiple Languages</h3>
+                    <p>System works with English, Hindi & Marathi text</p>
+                </div>
+                <div>
+                    <h3><i class="fas fa-shield-alt text-success"></i> Real-time Check</h3>
+                    <p>Instant fraud detection using AI and rule-based systems</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <footer class="footer">
+        <p>© 2025 AgriGuard - Protecting Farmers from Social Media Fraud</p>
+        <p><i class="fas fa-envelope"></i> support@agriguard.in | <i class="fas fa-phone"></i> 1800-XXX-XXXX</p>
+    </footer>
+    
+    <!-- Bootstrap JS Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Custom JavaScript -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('=== AGRIGUARD DETECTION SYSTEM ===');
+            
+            // ========== TAB SYSTEM ==========
+            const tabBtns = document.querySelectorAll('.tab-btn');
+            const tabContents = document.querySelectorAll('.tab-content');
+            
+            // Function to activate a tab
+            function activateTab(tabId) {
+                console.log('Activating tab:', tabId);
+                
+                // Update active tab button
+                tabBtns.forEach(btn => {
+                    btn.classList.remove('active');
+                    if (btn.getAttribute('data-tab') === tabId) {
+                        btn.classList.add('active');
+                    }
+                });
+                
+                // Show active tab content
+                tabContents.forEach(content => {
+                    content.classList.remove('active');
+                    if (content.id === tabId + '-tab') {
+                        content.classList.add('active');
+                        console.log('Tab content activated:', content.id);
+                    }
+                });
+            }
+            
+            // Initialize tabs
+            tabBtns.forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const tabId = this.getAttribute('data-tab');
+                    activateTab(tabId);
+                    
+                    // Save active tab to session storage
+                    sessionStorage.setItem('activeTab', tabId);
+                });
+            });
+            
+            // Restore active tab from session storage
+            const savedTab = sessionStorage.getItem('activeTab') || 'image';
+            activateTab(savedTab);
+            
+            // ========== FILE UPLOAD PREVIEW ==========
+            const fileInput = document.getElementById('image-upload');
+            const uploadArea = document.querySelector('.upload-area');
+            const previewText = document.getElementById('preview-text');
+            
+            if (fileInput && uploadArea) {
+                uploadArea.addEventListener('click', () => fileInput.click());
+                
+                fileInput.addEventListener('change', function(e) {
+                    const file = e.target.files[0];
+                    if (file) {
+                        if (previewText) {
+                            previewText.textContent = `📄 ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+                            previewText.style.color = '#2e7d32';
+                        }
+                    }
+                });
+            }
+            
+            // ========== FORM VALIDATION AND SUBMISSION ==========
+            const detectForm = document.getElementById('detectForm');
+            if (detectForm) {
+                detectForm.addEventListener('submit', function(e) {
+                    console.log('=== FORM SUBMISSION STARTED ===');
+                    
+                    // Get active tab
+                    const activeTabContent = document.querySelector('.tab-content.active');
+                    if (!activeTabContent) {
+                        e.preventDefault();
+                        alert('Please select an input method first');
+                        return;
+                    }
+                    
+                    const activeTabId = activeTabContent.id;
+                    console.log('Active tab ID:', activeTabId);
+                    
+                    let isValid = false;
+                    let errorMessage = '';
+                    
+                    // Validate based on active tab
+                    if (activeTabId === 'image-tab') {
+                        const imageInput = document.getElementById('image-upload');
+                        if (imageInput && imageInput.files.length > 0) {
+                            const file = imageInput.files[0];
+                            // Basic file type validation
+                            if (file.type.startsWith('image/')) {
+                                isValid = true;
+                                // Disable other inputs
+                                document.getElementById('textInput').disabled = true;
+                                document.getElementById('linkInput').disabled = true;
+                            } else {
+                                errorMessage = 'Please upload a valid image file (JPG, PNG, GIF)';
+                            }
+                        } else {
+                            errorMessage = 'Please upload an image file';
+                        }
+                    } 
+                    else if (activeTabId === 'text-tab') {
+                        const textInput = document.getElementById('textInput');
+                        if (textInput && textInput.value.trim()) {
+                            isValid = true;
+                            // Disable other inputs
+                            document.getElementById('image-upload').disabled = true;
+                            document.getElementById('linkInput').disabled = true;
+                        } else {
+                            errorMessage = 'Please enter text to analyze';
+                        }
+                    }
+                    else if (activeTabId === 'link-tab') {
+                        const linkInput = document.getElementById('linkInput');
+                        if (linkInput && linkInput.value.trim()) {
+                            const url = linkInput.value.trim();
+                            // Basic URL validation
+                            if (url.startsWith('http://') || url.startsWith('https://')) {
+                                isValid = true;
+                                // Disable other inputs
+                                document.getElementById('image-upload').disabled = true;
+                                document.getElementById('textInput').disabled = true;
+                            } else {
+                                errorMessage = 'URL must start with http:// or https://';
+                            }
+                        } else {
+                            errorMessage = 'Please enter a website URL';
+                        }
+                    }
+                    
+                    if (!isValid) {
+                        e.preventDefault();
+                        alert(errorMessage || 'Please provide valid input');
+                        return;
+                    }
+                    
+                    console.log('Form validation passed. Submitting...');
+                    
+                    // Show loading indicator
+                    const submitBtn = this.querySelector('button[type="submit"]');
+                    if (submitBtn) {
+                        const originalText = submitBtn.innerHTML;
+                        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzing...';
+                        submitBtn.disabled = true;
+                        
+                        // Re-enable inputs after submission (in case of error)
+                        setTimeout(() => {
+                            enableAllInputs();
+                            submitBtn.innerHTML = originalText;
+                            submitBtn.disabled = false;
+                        }, 8000);
+                    }
+                });
+            }
+            
+            // Function to enable all inputs
+            function enableAllInputs() {
+                document.getElementById('image-upload').disabled = false;
+                document.getElementById('textInput').disabled = false;
+                document.getElementById('linkInput').disabled = false;
+            }
+        });
+        
+        // ========== CLEAR FORM FUNCTION ==========
+        function clearForm() {
+            // Clear file input
+            const imageInput = document.getElementById('image-upload');
+            if (imageInput) {
+                imageInput.value = '';
+                const previewText = document.getElementById('preview-text');
+                if (previewText) {
+                    previewText.textContent = 'No file chosen';
+                    previewText.style.color = '';
+                }
+            }
+            
+            // Clear text input
+            const textInput = document.getElementById('textInput');
+            if (textInput) textInput.value = '';
+            
+            // Clear link input
+            const linkInput = document.getElementById('linkInput');
+            if (linkInput) linkInput.value = '';
+            
+            // Enable all inputs
+            document.getElementById('image-upload').disabled = false;
+            document.getElementById('textInput').disabled = false;
+            document.getElementById('linkInput').disabled = false;
+            
+            // Hide results
+            const resultsDiv = document.getElementById('results');
+            if (resultsDiv) resultsDiv.innerHTML = '';
+            
+            const enhancedResults = document.getElementById('enhancedResults');
+            if (enhancedResults) enhancedResults.style.display = 'none';
+            
+            // Reset to first tab
+            activateTab('image');
+            
+            console.log('Form cleared');
+        }
+        
+        // Function to activate tab (accessible globally)
+        function activateTab(tabId) {
+            const tabBtns = document.querySelectorAll('.tab-btn');
+            const tabContents = document.querySelectorAll('.tab-content');
+            
+            tabBtns.forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.getAttribute('data-tab') === tabId) {
+                    btn.classList.add('active');
+                }
+            });
+            
+            tabContents.forEach(content => {
+                content.classList.remove('active');
+                if (content.id === tabId + '-tab') {
+                    content.classList.add('active');
+                }
+            });
+            
+            sessionStorage.setItem('activeTab', tabId);
+        }
+        
+        // ========== AJAX FRAUD DETECTION (Optional) ==========
+        function detectFraudAJAX() {
+            const text = document.getElementById('textInput').value;
+            
+            if (!text.trim()) {
+                alert('Please enter text to analyze');
+                return;
+            }
+            
+            // Show loading
+            document.getElementById('enhancedResultContent').innerHTML = `
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Analyzing with AI model...</p>
+                </div>
+            `;
+            document.getElementById('enhancedResults').style.display = 'block';
+            
+            // Make AJAX request to ML endpoint
+            fetch('/check_fraud', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({
+                    'text': text
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'error') {
+                    document.getElementById('enhancedResultContent').innerHTML = `
+                        <div class="alert alert-danger">
+                            ${data.message}
+                        </div>
+                    `;
+                    return;
+                }
+                
+                // Display enhanced results
+                displayEnhancedAnalysis(data);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('enhancedResultContent').innerHTML = `
+                    <div class="alert alert-danger">
+                        Error analyzing text. Please try again.
+                    </div>
+                `;
+            });
+        }
+        
+        function displayEnhancedAnalysis(data) {
+            let resultClass = 'warning';
+            if (data.result === 'genuine') resultClass = 'success';
+            if (data.result === 'fraud') resultClass = 'danger';
+            
+            let html = `
+                <div class="alert alert-${resultClass}">
+                    <h5>${data.message}</h5>
+                    <p class="mb-1">Confidence: ${data.confidence.toFixed(1)}%</p>
+                    <div class="progress mt-2" style="height: 20px;">
+                        <div class="progress-bar bg-${resultClass}" 
+                             style="width: ${data.confidence}%">
+                            ${data.confidence.toFixed(1)}%
+                        </div>
+                    </div>
+                    <p class="mt-2 small">Method: ${data.method}</p>
+                </div>
+            `;
+            
+            // Add detailed analysis if available
+            if (data.detailed_analysis) {
+                const analysis = data.detailed_analysis;
+                
+                html += `
+                    <div class="mt-4">
+                        <h6>Detailed Analysis</h6>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="stat-card">
+                                    <small class="text-muted">ML Prediction</small>
+                                    <h5><span class="badge bg-${getLabelClass(analysis.ml_prediction)}">
+                                        ${analysis.ml_prediction}
+                                    </span></h5>
+                                    <small>${analysis.ml_confidence}% confidence</small>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="stat-card">
+                                    <small class="text-muted">Rule-Based Score</small>
+                                    <h5>${analysis.rule_based_score}/100</h5>
+                                    <small>${analysis.rule_confidence}% confidence</small>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="stat-card">
+                                    <small class="text-muted">Final Confidence</small>
+                                    <h5>${analysis.final_confidence}%</h5>
+                                    <small>Combined analysis</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // Add keyword analysis
+                html += `
+                    <div class="mt-4">
+                        <h6>Keyword Analysis</h6>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="card">
+                                    <div class="card-body text-center">
+                                        <h3 class="text-success">${analysis.keyword_analysis.agriculture_terms}</h3>
+                                        <p class="mb-0">Agriculture Terms</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card">
+                                    <div class="card-body text-center">
+                                        <h3 class="text-danger">${analysis.keyword_analysis.fraud_indicators}</h3>
+                                        <p class="mb-0">Fraud Indicators</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card">
+                                    <div class="card-body text-center">
+                                        <h3 class="text-primary">${analysis.keyword_analysis.brand_mentions}</h3>
+                                        <p class="mb-0">Brand Mentions</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // Add recommendation
+                if (data.recommendation) {
+                    html += `
+                        <div class="mt-4">
+                            <h6>Recommendation</h6>
+                            <div class="alert alert-${getLabelClass(data.result)}">
+                                ${data.recommendation}
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+            
+            document.getElementById('enhancedResultContent').innerHTML = html;
+            
+            // Scroll to results
+            document.getElementById('enhancedResults').scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        function getLabelClass(label) {
+            switch(label) {
+                case 'genuine': return 'success';
+                case 'suspicious': return 'warning';
+                case 'fraud': return 'danger';
+                default: return 'secondary';
+            }
+        }
+    </script>
+</body>
+</html>
