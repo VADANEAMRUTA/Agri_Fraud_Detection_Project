@@ -4,13 +4,10 @@ import sqlite3
 from flask import Flask, request, render_template, redirect, session, flash, jsonify, url_for
 from PIL import Image, ImageEnhance, ImageFilter
 import pytesseract
-import cv2
-import io
 import re
 import os
 import tempfile
 import requests
-import numpy as np
 from bs4 import BeautifulSoup
 import urllib.parse
 from urllib.parse import urlparse
@@ -25,11 +22,6 @@ from email.mime.multipart import MIMEMultipart
 from content_validator import ContentValidator
 # Import the database instance
 from database import db_instance
-
-if os.name == "nt":
-    default_tesseract_path = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-    if os.path.exists(default_tesseract_path):
-        pytesseract.pytesseract.tesseract_cmd = default_tesseract_path
 
 
 # Import ML model - handle import errors gracefully
@@ -62,8 +54,6 @@ def mysql_connection_available(db_name):
         return True
     except Exception:
         return False
-
-
 
 # ---------------- LOGIN REQUIRED DECORATOR ----------------
 def login_required(f):
@@ -651,33 +641,6 @@ def check_government_domain_first(url, content=""):
     """
     if not url:
         return None
-
-    try:
-        from train_model_v2 import PROTECTED_DOMAINS, split_domain
-
-        government_domains = {
-            domain.lower()
-            for domain, category in PROTECTED_DOMAINS.items()
-            if category == "government"
-        }
-        registered_domain = (split_domain(url).get("registered_domain") or "").lower()
-
-        if registered_domain in government_domains:
-            return {
-                'result': 'âœ… GENUINE - Government Website',
-                'confidence': 98.5,
-                'method': 'Rule-Based',
-                'rules_triggered': [f"Protected government domain matched exactly: {registered_domain}"],
-                'details': 'Legitimate government agricultural portal',
-                'verification_tips': 'This is an official government website for farmers',
-                'category': 'government'
-            }
-
-        # Block the old broad .gov.in/.nic.in bypass for non-protected domains.
-        if registered_domain.endswith(".gov.in") or registered_domain.endswith(".nic.in"):
-            return None
-    except Exception:
-        pass
     
     url_lower = url.lower()
     
@@ -963,163 +926,6 @@ def clean_ocr_text(text):
     text = text.replace(' ,', ',')  # Space before comma
     
     return text.strip()
-
-
-SUPPORTED_LANGS = "eng+hin+ben"
-
-
-def _read_image_bytes(image_file):
-    if hasattr(image_file, "seek"):
-        image_file.seek(0)
-    if hasattr(image_file, "read"):
-        raw_bytes = image_file.read()
-        if hasattr(image_file, "seek"):
-            image_file.seek(0)
-        return raw_bytes
-    with open(image_file, "rb") as handle:
-        return handle.read()
-
-
-def preprocess_image_for_ocr(image_file):
-    """Preprocess image to improve OCR accuracy."""
-    raw_bytes = _read_image_bytes(image_file)
-    if not raw_bytes:
-        raise ValueError("Empty image input")
-
-    pil_image = Image.open(io.BytesIO(raw_bytes)).convert("RGB")
-    image_bgr = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
-    gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
-
-    height, width = gray.shape
-    if width < 1000 or height < 700:
-        scale = max(1000 / max(width, 1), 700 / max(height, 1))
-        gray = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
-
-    denoised = cv2.fastNlMeansDenoising(gray, None, 10, 7, 21)
-    adaptive = cv2.adaptiveThreshold(
-        denoised,
-        255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY,
-        31,
-        11,
-    )
-    median = cv2.medianBlur(adaptive, 3)
-    otsu = cv2.threshold(denoised, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
-    return {
-        "rgb": pil_image,
-        "gray": gray,
-        "adaptive": adaptive,
-        "median": median,
-        "otsu": otsu,
-    }
-
-
-def detect_image_language(image_file):
-    """Detect primary language in image using OCR heuristics."""
-    processed_images = preprocess_image_for_ocr(image_file)
-    candidates = ["eng+hin+ben", "eng+ben", "eng+hin", "eng"]
-    best_lang = "eng"
-    best_score = -1
-
-    for lang in candidates:
-        try:
-            sample = pytesseract.image_to_string(processed_images["median"], lang=lang, config="--oem 3 --psm 11")
-        except Exception:
-            continue
-        bengali_chars = len(re.findall(r"[\u0980-\u09ff]", sample))
-        devanagari_chars = len(re.findall(r"[\u0900-\u097f]", sample))
-        latin_words = len(re.findall(r"[A-Za-z]{2,}", sample))
-        score = bengali_chars * 3 + devanagari_chars * 2 + latin_words
-        if score > best_score:
-            best_score = score
-            best_lang = lang
-    return best_lang
-
-
-def _recover_structured_tokens(text):
-    tokens = []
-    tokens.extend(re.findall(r"\bNPK\s*\d{1,2}\s*[-:/]\s*\d{1,2}\s*[-:/]\s*\d{1,2}\b", text, flags=re.IGNORECASE))
-    tokens.extend(re.findall(r"\b\d{1,2}\s*[-:/]\s*\d{1,2}\s*[-:/]\s*\d{1,2}\b", text))
-    tokens.extend(re.findall(r"\b(?:www\.)?[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", text))
-    tokens.extend(re.findall(r"\b(?:IFFCO|NCPL|NTPC|NPK)\b", text, flags=re.IGNORECASE))
-    return list(dict.fromkeys(token.strip() for token in tokens if token.strip()))
-
-
-def extract_text_from_image(image_file):
-    """Extract text from uploaded image using OCR with multilingual fallback."""
-    try:
-        if os.name == "nt" and not os.path.exists(getattr(pytesseract.pytesseract, "tesseract_cmd", "")):
-            fallback_path = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-            if os.path.exists(fallback_path):
-                pytesseract.pytesseract.tesseract_cmd = fallback_path
-
-        processed_images = preprocess_image_for_ocr(image_file)
-        detected_lang = detect_image_language(image_file)
-        language_candidates = []
-        for lang in [detected_lang, SUPPORTED_LANGS, "eng+hin", "eng+ben", "eng"]:
-            if lang not in language_candidates:
-                language_candidates.append(lang)
-
-        configs = ["--oem 3 --psm 6", "--oem 3 --psm 11", "--oem 3 --psm 12"]
-        best_text = ""
-        best_score = -1
-        last_error = None
-
-        for image_name in ["median", "adaptive", "otsu", "gray"]:
-            image_variant = processed_images[image_name]
-            for lang in language_candidates:
-                for config in configs:
-                    try:
-                        extracted = pytesseract.image_to_string(image_variant, lang=lang, config=config)
-                    except Exception as exc:
-                        last_error = exc
-                        continue
-
-                    cleaned = clean_ocr_text(" ".join(extracted.split()).replace("|", "I"))
-                    structured_tokens = _recover_structured_tokens(cleaned)
-                    score = (
-                        len(re.findall(r"[A-Za-z\u0900-\u097f\u0980-\u09ff]{2,}", cleaned))
-                        + len(structured_tokens) * 4
-                    )
-                    if score > best_score:
-                        best_score = score
-                        best_text = cleaned
-
-        if not best_text and last_error:
-            return f"OCR Error: {last_error}"
-
-        structured_tokens = _recover_structured_tokens(best_text)
-        if structured_tokens:
-            token_suffix = " ".join(token for token in structured_tokens if token.lower() not in best_text.lower())
-            if token_suffix:
-                best_text = f"{best_text} {token_suffix}".strip()
-
-        return best_text.strip() or "No text detected in image"
-    except Exception as exc:
-        print(f"OCR Error: {exc}")
-        return f"OCR Error: {exc}"
-
-
-def analyze_image_for_fraud(image_file):
-    """Extract text from image and flag suspicious OCR content."""
-    extracted_text = extract_text_from_image(image_file)
-    lower_text = (extracted_text or "").lower()
-    fraud_keywords = [
-        "winner", "urgent", "verify", "otp", "lottery", "free", "claim", "reward",
-        "gift", "cashback", "account locked", "kyc", "subsidy",
-    ]
-    fraud_indicators = [keyword for keyword in fraud_keywords if keyword in lower_text]
-
-    structured_tokens = _recover_structured_tokens(extracted_text)
-    if structured_tokens:
-        fraud_indicators.extend([f"ocr_pattern::{token}" for token in structured_tokens])
-
-    return {
-        "text": extracted_text,
-        "fraud_indicators": list(dict.fromkeys(fraud_indicators)),
-        "is_suspicious": bool([item for item in fraud_indicators if not item.startswith("ocr_pattern::")]),
-    }
 
 # ---------------- WEB SCRAPING FUNCTIONS ----------------
 def is_valid_url(url):
@@ -1423,7 +1229,7 @@ def enhanced_check_fraud_with_ml(content, url=None):
     
     try:
         # Get ML prediction
-        ml_result, ml_confidence = ml_detector.predict(content, url=url)
+        ml_result, ml_confidence = ml_detector.predict(content)
         
         # Convert ML confidence to percentage (0-100)
         ml_confidence_percent = ml_confidence * 100
@@ -1434,10 +1240,7 @@ def enhanced_check_fraud_with_ml(content, url=None):
         
         # Determine final result
         if "🚨" in ml_result:
-            if ml_confidence >= 0.95:
-                final_result = "🚨 AI Confirmed: High Fraud Risk"
-                final_confidence = min(100, max(final_confidence, ml_confidence_percent))
-            elif "🚨" in rule_result:
+            if "🚨" in rule_result:
                 final_result = "🚨 AI Confirmed: High Fraud Risk"
                 final_confidence = min(100, final_confidence * 1.1)
             else:
@@ -1459,8 +1262,8 @@ def enhanced_check_fraud_with_ml(content, url=None):
         
         # Get ML explanation if confidence is low
         ml_explanation = []
-        if final_confidence < 70 or ("🚨" in ml_result and ml_confidence >= 0.95):
-            ml_explanation = ml_detector.explain_prediction(content, url=url, top_n=5)
+        if final_confidence < 70:
+            ml_explanation = ml_detector.explain_prediction(content, top_n=5)
         
         # Clamp confidence
         final_confidence = max(0, min(100, final_confidence))
@@ -2197,8 +2000,6 @@ def detect():
     found_keywords = []
     ml_explanation = []
     detection_method = "Rule-Based"
-    analyzed_url = ""
-    generated_at = datetime.now()
     
     if request.method == "POST":
         print("="*60)
@@ -2238,13 +2039,12 @@ def detect():
         # 3. Check if LINK was entered
         elif link_input:
             input_type = 'link'
-            analyzed_url = link_input
             print("✅ Detected: LINK input")
             
             # ====== IMMEDIATE GOVERNMENT DOMAIN CHECK ======
             # Check for .gov.in domains BEFORE any processing
             url_lower = link_input.lower()
-            if False and ('.gov.in' in url_lower or '.nic.in' in url_lower):
+            if '.gov.in' in url_lower or '.nic.in' in url_lower:
                 print("🎯 Government domain detected - Returning 98% genuine")
                 result = "✅ GENUINE - Government Website"
                 confidence = 98.5
@@ -2274,8 +2074,6 @@ def detect():
                                      found_keywords=found_keywords,
                                      ml_explanation=ml_explanation,
                                      detection_method=detection_method,
-                                     analyzed_url=analyzed_url,
-                                     generated_at=generated_at,
                                      ml_available=ML_AVAILABLE)
         
         print(f"📋 Selected input type: {input_type}")
@@ -2295,8 +2093,7 @@ def detect():
             
             # Extract text from image
             try:
-                image_analysis = analyze_image_for_fraud(image_file)
-                content = image_analysis["text"]
+                content = extract_text_from_image(image_file)
                 print(f"📄 OCR extracted {len(content)} characters")
                 print(f"📄 First 100 chars: {content[:100]}")
                 
@@ -2312,16 +2109,6 @@ def detect():
                     result, confidence, found_keywords = enhanced_check_fraud(content)
                     ml_explanation = []
                     detection_method = "Rule-Based"
-
-                if image_analysis["fraud_indicators"]:
-                    image_explanation = [
-                        {"feature": f"image::fraud_keyword::{indicator}", "importance": 1.0}
-                        for indicator in image_analysis["fraud_indicators"]
-                    ]
-                    ml_explanation = (ml_explanation or []) + image_explanation
-                    if image_analysis["is_suspicious"] and "Fraud" not in result and "Suspicious" not in result:
-                        result = "⚠️ OCR Found Suspicious Text"
-                        confidence = max(confidence, 65)
                 
                 highlighted_content = highlight_keywords(content)
                 
@@ -2434,10 +2221,7 @@ def detect():
                          found_keywords=found_keywords or [],
                          ml_explanation=ml_explanation,
                          detection_method=detection_method,
-                         analyzed_url=analyzed_url,
-                         generated_at=generated_at,
                          ml_available=ML_AVAILABLE)
-
 
 # ---------------- CHECK FRAUD API ENDPOINT ----------------
 @app.route("/check_fraud", methods=["POST"])
