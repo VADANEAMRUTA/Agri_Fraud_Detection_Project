@@ -1,65 +1,84 @@
-import pymysql
+# fix_database.py - Fix MySQL database schema for AgriGuard
+import mysql.connector
 import os
 from dotenv import load_dotenv
 
+# Load environment variables
 load_dotenv()
 
-# Get MySQL connection settings
-config = {
-    'host': os.getenv('MYSQL_HOST', '127.0.0.1'),
-    'port': int(os.getenv('MYSQL_PORT', 3306)),
-    'user': os.getenv('MYSQL_USER', 'root'),
-    'password': os.getenv('MYSQL_PASSWORD', ''),
-    'database': os.getenv('MYSQL_DB_USERS', 'social_media_fraud_users'),
-    'autocommit': True
-}
+def fix_database_schema():
+    """Add missing columns to users table"""
+    try:
+        # Connect to MySQL database
+        conn = mysql.connector.connect(
+            host=os.getenv("MYSQL_HOST", "127.0.0.1"),
+            port=int(os.getenv("MYSQL_PORT", 3306)),
+            user=os.getenv("MYSQL_USER", "root"),
+            password=os.getenv("MYSQL_PASSWORD", "root"),
+            database=os.getenv("MYSQL_DB_USERS", "social_media_fraud_users")
+        )
+        cursor = conn.cursor()
 
-print("Connecting to MySQL...")
-conn = pymysql.connect(**config)
-cursor = conn.cursor()
+        print("🔧 Fixing database schema...")
 
-# Create users table (fixed for MySQL)
-print("Creating users table...")
-cursor.execute("""
-    CREATE TABLE IF NOT EXISTS users (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        username VARCHAR(100) NOT NULL UNIQUE,
-        email VARCHAR(100) NOT NULL UNIQUE,
-        password_hash VARCHAR(255) NOT NULL,
-        reset_token VARCHAR(255),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-""")
+        # Add role column if it doesn't exist
+        try:
+            cursor.execute("ALTER TABLE users ADD COLUMN role VARCHAR(20) DEFAULT 'farmer'")
+            print("✅ Added 'role' column")
+        except mysql.connector.Error as e:
+            if "Duplicate column name" in str(e):
+                print("ℹ️ 'role' column already exists")
+            else:
+                print(f"❌ Error adding 'role' column: {e}")
 
-print("Users table created successfully!")
+        # Add account_type column if it doesn't exist (for backward compatibility)
+        try:
+            cursor.execute("ALTER TABLE users ADD COLUMN account_type VARCHAR(50) DEFAULT 'farmer'")
+            print("✅ Added 'account_type' column")
+        except mysql.connector.Error as e:
+            if "Duplicate column name" in str(e):
+                print("ℹ️ 'account_type' column already exists")
+            else:
+                print(f"❌ Error adding 'account_type' column: {e}")
 
-# Connect to AgriGuard database
-config['database'] = os.getenv('MYSQL_DB_AGRIGUARD', 'social_media_fraud_agriguard')
-conn2 = pymysql.connect(**config)
-cursor2 = conn2.cursor()
+        # Add mobile column if it doesn't exist
+        try:
+            cursor.execute("ALTER TABLE users ADD COLUMN mobile VARCHAR(15)")
+            print("✅ Added 'mobile' column")
+        except mysql.connector.Error as e:
+            if "Duplicate column name" in str(e):
+                print("ℹ️ 'mobile' column already exists")
+            else:
+                print(f"❌ Error adding 'mobile' column: {e}")
 
-# Create posts table (fixed for MySQL)
-print("Creating posts table...")
-cursor2.execute("""
-    CREATE TABLE IF NOT EXISTS posts (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        post_id VARCHAR(255) NOT NULL UNIQUE,
-        content TEXT,
-        platform VARCHAR(50),
-        author VARCHAR(100),
-        timestamp DATETIME,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-""")
+        # Add created_at column if it doesn't exist
+        try:
+            cursor.execute("ALTER TABLE users ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+            print("✅ Added 'created_at' column")
+        except mysql.connector.Error as e:
+            if "Duplicate column name" in str(e):
+                print("ℹ️ 'created_at' column already exists")
+            else:
+                print(f"❌ Error adding 'created_at' column: {e}")
 
-# Create analysis_results table (fixed for MySQL)
-print("Creating analysis_results table...")
-cursor2.execute("""
-    CREATE TABLE IF NOT EXISTS analysis_results (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        post_id VARCHAR(255) NOT NULL,
-        fraud_score FLOAT,
-        classification VARCHAR(50),
+        # Check current table structure
+        cursor.execute("DESCRIBE users")
+        columns = cursor.fetchall()
+        print(f"\n📋 Current users table structure:")
+        for col in columns:
+            print(f"   - {col[0]}: {col[1]}")
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        print("\n✅ Database schema fixed successfully!")
+
+    except Exception as e:
+        print(f"❌ Error fixing database schema: {e}")
+
+if __name__ == "__main__":
+    fix_database_schema()
         risk_level VARCHAR(50),
         analysis_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (post_id) REFERENCES posts(post_id)

@@ -1,11 +1,22 @@
 from dotenv import load_dotenv
+import os
 load_dotenv()
+
+# Debug: Check environment variables
+print("=" * 50)
+print("ENVIRONMENT VARIABLES CHECK:")
+print(f"ADMIN_SECRET_KEY: '{os.getenv('ADMIN_SECRET_KEY')}'")
+print(f"ADMIN_REGISTRATION_KEY: '{os.getenv('ADMIN_REGISTRATION_KEY')}'")
+print("=" * 50)
+
 import sqlite3
-from flask import Flask, request, render_template, redirect, session, flash, jsonify, url_for
+import mysql.connector
+from flask import Flask, request, render_template, redirect, session, flash, jsonify, url_for, Response
 from PIL import Image, ImageEnhance, ImageFilter
 import pytesseract
 import cv2
 import io
+import csv
 import re
 import os
 import tempfile
@@ -16,6 +27,7 @@ import urllib.parse
 from urllib.parse import urlparse
 import json
 from werkzeug.utils import secure_filename
+from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
 from functools import wraps
 import secrets
@@ -47,8 +59,10 @@ os.makedirs('static/uploads/profile_pics', exist_ok=True)
 
 # ---------------- FLASK SETUP ----------------
 app = Flask(__name__)
-app.secret_key = "agri_fraud_secret"
+app.secret_key = os.getenv('SECRET_KEY', 'agri_fraud_secret_key_change_this')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+app.config['SESSION_PERMANENT'] = False
+app.config['SESSION_TYPE'] = 'filesystem'
 
 DATABASE_ALIASES = ['users.db', 'agriguard.db']
 
@@ -76,6 +90,16 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+# ---------------- MYSQL HELPER ----------------
+def get_mysql_connection():
+    return mysql.connector.connect(
+        host=os.getenv("MYSQL_HOST", "127.0.0.1"),
+        port=int(os.getenv("MYSQL_PORT", 3306)),
+        user=os.getenv("MYSQL_USER", "root"),
+        password=os.getenv("MYSQL_PASSWORD", "root"),
+        database=os.getenv("MYSQL_DB_USERS", "social_media_fraud_users")
+    )
+
 # ---------------- ADMIN REQUIRED DECORATOR ----------------
 def admin_required(f):
     """Decorator to require admin access"""
@@ -85,14 +109,19 @@ def admin_required(f):
             flash("Please login first", "error")
             return redirect(url_for('login_selector'))
         
-        # Check if user is admin
-        is_admin = (session.get('account_type') == 'admin' or 
-                   session.get('username') == 'admin')
+        # Check if user is admin by role field
+        user_role = session.get('role', 'farmer').lower()
+        is_admin = user_role == 'admin'
+        
+        print(f"DEBUG: Checking admin access - role={user_role}, is_admin={is_admin}")
+        print(f"DEBUG: Full session keys: {list(session.keys())}")
         
         if not is_admin:
-            flash("Admin access required!", "error")
+            print(f"❌ Admin access denied for user {session.get('username')} with role {user_role}")
+            flash(f"Admin access required! Your role is: {user_role}", "error")
             return render_template("admin_access.html")
         
+        print(f"✅ Admin access granted for user {session.get('username')}")
         return f(*args, **kwargs)
     return decorated_function
 
@@ -189,7 +218,12 @@ def create_database_from_scratch():
         raise e
 
 def verify_and_repair_database():
-    """Verify database structure and add missing tables/columns WITHOUT dropping data"""
+    """Verify database structure - skip for MySQL setup"""
+    print("   Database verification skipped (using MySQL)")
+    return
+
+    # The rest of the SQLite code is commented out since we're using MySQL
+    """
     import sqlite3
     
     try:
@@ -204,7 +238,7 @@ def verify_and_repair_database():
         # Create missing tables WITHOUT dropping existing ones
         if 'users' not in existing_tables:
             print("   Creating missing 'users' table...")
-            c.execute("""
+            c.execute('''
                 CREATE TABLE users(
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     username TEXT UNIQUE NOT NULL,
@@ -221,11 +255,11 @@ def verify_and_repair_database():
                     reset_token TEXT,
                     reset_token_expiry DATETIME
                 )
-            """)
+            ''')
         
         if 'scans' not in existing_tables:
             print("   Creating missing 'scans' table...")
-            c.execute("""
+            c.execute('''
                 CREATE TABLE scans (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER,
@@ -237,13 +271,13 @@ def verify_and_repair_database():
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
                 )
-            """)
+            ''')
             c.execute("CREATE INDEX IF NOT EXISTS idx_scans_user_id ON scans(user_id)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_scans_created_at ON scans(created_at)")
         
         if 'user_activity' not in existing_tables:
             print("   Creating missing 'user_activity' table...")
-            c.execute("""
+            c.execute('''
                 CREATE TABLE user_activity (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER,
@@ -253,7 +287,7 @@ def verify_and_repair_database():
                     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
                 )
-            """)
+            ''')
             c.execute("CREATE INDEX IF NOT EXISTS idx_activity_user_id ON user_activity(user_id)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_activity_timestamp ON user_activity(timestamp)")
         
@@ -310,59 +344,53 @@ def verify_and_repair_database():
         
     except Exception as e:
         print(f"❌ Error verifying database: {e}")
+    """
 
 # ---------------- CREATE ADMIN USER ----------------
 def create_admin_user():
-    """Create admin user if not exists"""
+    """Create admin user if not exists - using MySQL"""
     try:
-        conn = sqlite3.connect('users.db')
-        c = conn.cursor()
-        
-        # First, check if admin column exists
-        c.execute("PRAGMA table_info(users)")
-        columns = [col[1] for col in c.fetchall()]
-        
-        # Add account_type column if it doesn't exist
-        if 'account_type' not in columns:
-            print("   Adding account_type column...")
-            c.execute("ALTER TABLE users ADD COLUMN account_type TEXT DEFAULT 'standard'")
-            conn.commit()
-        
+        # Connect to MySQL database
+        conn = mysql.connector.connect(
+            host=os.getenv("MYSQL_HOST", "127.0.0.1"),
+            port=int(os.getenv("MYSQL_PORT", 3306)),
+            user=os.getenv("MYSQL_USER", "root"),
+            password=os.getenv("MYSQL_PASSWORD", "root"),
+            database=os.getenv("MYSQL_DB_USERS", "social_media_fraud_users")
+        )
+        cursor = conn.cursor()
+
         # Check if admin exists
-        c.execute("SELECT * FROM users WHERE username = 'admin' OR account_type = 'admin'")
-        admins = c.fetchall()
-        
+        cursor.execute("SELECT * FROM users WHERE username = 'admin' OR account_type = 'admin'")
+        admins = cursor.fetchall()
+
         if not admins:
             # Create admin user
-            c.execute("""
-                INSERT INTO users (username, email, mobile, password, fullname, account_type)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, ('admin', 'admin@agriguard.com', '9999999999', 'admin123', 'System Administrator', 'admin'))
-            
+            from werkzeug.security import generate_password_hash
+            password_hash = generate_password_hash("admin123")
+            cursor.execute("""
+                INSERT INTO users (username, email, mobile, password, account_type, fullname)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, ('admin', 'admin@agriguard.com', '9999999999', password_hash, 'admin', 'System Administrator'))
+
             conn.commit()
             print("✅ Admin user created: admin/admin123")
         else:
             print(f"✅ {len(admins)} admin user(s) already exist")
-        
-        # Count total users
-        c.execute("SELECT COUNT(*) FROM users")
-        total_users = c.fetchone()[0]
-        print(f"   Total users in system: {total_users}")
-        
+
+        cursor.close()
         conn.close()
     except Exception as e:
         print(f"❌ Error creating admin user: {e}")
 
 # ---------------- VERIFY DATABASES ----------------
 def verify_databases():
-    """Verify all databases are working properly"""
-    import sqlite3
-    import os
-    
-    print("\n" + "="*50)
-    print("VERIFYING DATABASES...")
-    print("="*50)
-    
+    """Verify databases - skipped for MySQL setup"""
+    print("   Database verification skipped (using MySQL)")
+    return
+
+    # The rest of the SQLite verification code is commented out
+    """
     databases = [
         ("users.db", [
             ("users", "SELECT COUNT(*) FROM users"),
@@ -411,9 +439,10 @@ def verify_databases():
             except Exception as e:
                 print(f"⚠️ Error checking {db_file}: {e}")
         else:
-            print(f"📁 {db_file} not found (will be created when needed)")
+            print(f"⚠️ {db_file} does not exist")
     
-    print("="*50 + "\n")
+    print("✅ Database verification complete!")
+    """
 
 # ---------------- PASSWORD RESET FUNCTIONS ----------------
 def send_reset_email(email, reset_link, username):
@@ -636,6 +665,47 @@ genuine_brands = [
     "नमधारी", "सफल", "कृषिकेअर", "ग्रीन गोल्ड", "परादीप",
     "ग्रीन गेट", "वॉटरमार्केट"
 ]
+
+GENUINE_AGRICULTURE_BRANDS = [
+    'iffco', 'nepalco', 'kribhco', 'cfcl', 'rallis', 'ncp', 'ntpc', 'nfl', 'gsfc',
+    'coromandel', 'iocl', 'hpcl', 'bpcl', 'deepak', 'tata', 'godrej', 'paradeep',
+    'zuari', 'smartchem', 'fact', 'rcf', 'mcf', 'dcm', 'chambal', 'adama',
+    'upl', 'bayer', 'syngenta', 'corteva', 'basf', 'mahadhan', 'agromore',
+    'farmson', 'indofil', 'dhanuka', 'nagarjuna', 'girnar', 'dharti', 'safex',
+    'farmer.gov.in', 'pmkisan.gov.in', 'agriculture.gov.in', 'agri.gov.in',
+    'agricoop.nic.in', 'icar.gov.in', 'agmarknet.gov.in'
+]
+
+# Agriculture keywords for content relevance detection
+AGRICULTURE_KEYWORDS = [
+    # Fertilizer related
+    'iffco', 'kribhco', 'npk', 'urea', 'dap', 'potash', 'fertilizer',
+    # Crop related
+    'wheat', 'rice', 'paddy', 'sugarcane', 'cotton', 'vegetable',
+    # Farming related
+    'kisan', 'farmer', 'agriculture', 'farming', 'crop', 'soil',
+    # Government schemes
+    'pmkisan', 'gov.in', 'subsidy', 'mandi', 'bsp',
+    # Pesticides
+    'pesticide', 'insecticide', 'herbicide', 'weedicide',
+    # Seeds
+    'seed', 'hybrid', 'bt cotton', 'germination',
+    # Bengali agriculture words
+    'সার', 'বীজ', 'চাষ', 'কৃষক', 'ফসল', 'ধান', 'গম',
+    # Hindi agriculture words
+    'खाद', 'बीज', 'किसान', 'फसल', 'सब्सिडी'
+]
+
+def is_agriculture_related(text):
+    """Check if text/content is related to agriculture"""
+    if not text:
+        return False
+    
+    text_lower = text.lower()
+    for keyword in AGRICULTURE_KEYWORDS:
+        if keyword in text_lower:
+            return True
+    return False
 
 # Trusted government domains
 trusted_government_domains = [
@@ -966,6 +1036,7 @@ def clean_ocr_text(text):
 
 
 SUPPORTED_LANGS = "eng+hin+ben"
+FAST_OCR_CONFIG = "--oem 3 --psm 6"
 
 
 def _read_image_bytes(image_file):
@@ -980,37 +1051,69 @@ def _read_image_bytes(image_file):
         return handle.read()
 
 
-def preprocess_image_for_ocr(image_file):
-    """Preprocess image to improve OCR accuracy."""
+def compress_image(image_file, max_size=1024, quality=85):
+    """Compress uploaded images before OCR to reduce processing time."""
     raw_bytes = _read_image_bytes(image_file)
     if not raw_bytes:
         raise ValueError("Empty image input")
 
-    pil_image = Image.open(io.BytesIO(raw_bytes)).convert("RGB")
+    pil_image = Image.open(io.BytesIO(raw_bytes))
+    if pil_image.mode not in ("RGB", "L"):
+        pil_image = pil_image.convert("RGB")
+    elif pil_image.mode == "L":
+        pil_image = pil_image.convert("RGB")
+
+    if pil_image.width > max_size or pil_image.height > max_size:
+        pil_image.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
+
+    output = io.BytesIO()
+    pil_image.save(output, format="JPEG", quality=quality, optimize=True)
+    output.seek(0)
+    return output
+
+
+def normalize_ocr_language(selected_language=None):
+    """Map UI/session language choices to the fastest useful Tesseract language set."""
+    language_map = {
+        "en": SUPPORTED_LANGS,
+        "eng": "eng",
+        "english": "eng",
+        "hi": "eng+hin",
+        "hin": "eng+hin",
+        "hindi": "eng+hin",
+        "mr": "eng+hin",
+        "marathi": "eng+hin",
+        "bn": "eng+ben",
+        "ben": "eng+ben",
+        "bengali": "eng+ben",
+    }
+    return language_map.get((selected_language or "").strip().lower(), SUPPORTED_LANGS)
+
+
+def preprocess_image_for_ocr(image_file):
+    """Preprocess image to improve OCR accuracy while keeping OCR reasonably fast."""
+    compressed_stream = compress_image(image_file)
+    pil_image = Image.open(compressed_stream).convert("RGB")
     image_bgr = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
     gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
 
-    height, width = gray.shape
-    if width < 1000 or height < 700:
-        scale = max(1000 / max(width, 1), 700 / max(height, 1))
-        gray = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
-
-    denoised = cv2.fastNlMeansDenoising(gray, None, 10, 7, 21)
+    contrast = cv2.convertScaleAbs(gray, alpha=1.25, beta=8)
+    denoised = cv2.fastNlMeansDenoising(contrast, None, 9, 7, 21)
     adaptive = cv2.adaptiveThreshold(
         denoised,
         255,
         cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
         cv2.THRESH_BINARY,
-        31,
-        11,
+        21,
+        8,
     )
-    median = cv2.medianBlur(adaptive, 3)
     otsu = cv2.threshold(denoised, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
     return {
         "rgb": pil_image,
         "gray": gray,
+        "contrast": contrast,
+        "denoised": denoised,
         "adaptive": adaptive,
-        "median": median,
         "otsu": otsu,
     }
 
@@ -1024,7 +1127,7 @@ def detect_image_language(image_file):
 
     for lang in candidates:
         try:
-            sample = pytesseract.image_to_string(processed_images["median"], lang=lang, config="--oem 3 --psm 11")
+            sample = pytesseract.image_to_string(processed_images["adaptive"], lang=lang, config="--oem 3 --psm 6")
         except Exception:
             continue
         bengali_chars = len(re.findall(r"[\u0980-\u09ff]", sample))
@@ -1046,8 +1149,29 @@ def _recover_structured_tokens(text):
     return list(dict.fromkeys(token.strip() for token in tokens if token.strip()))
 
 
-def extract_text_from_image(image_file):
-    """Extract text from uploaded image using OCR with multilingual fallback."""
+def is_valid_text(text):
+    """Check whether OCR output contains enough meaningful text to trust."""
+    if not text:
+        return False
+
+    cleaned = clean_ocr_text(text)
+    if len(cleaned) < 10:
+        return False
+
+    words = re.findall(r"[A-Za-z\u0900-\u097f\u0980-\u09ff]{3,}", cleaned)
+    long_words = [word for word in words if len(word) > 2]
+    unique_words = {word.lower() for word in long_words}
+    alpha_chars = len(re.findall(r"[A-Za-z\u0900-\u097f\u0980-\u09ff]", cleaned))
+    alnum_chars = len(re.findall(r"[A-Za-z0-9\u0900-\u097f\u0980-\u09ff]", cleaned))
+
+    if alpha_chars < 12 or len(unique_words) < 3:
+        return False
+
+    return alnum_chars > 0 and (alpha_chars / alnum_chars) >= 0.45
+
+
+def extract_text_from_image(image_file, selected_language="eng"):
+    """Extract text from uploaded image using balanced OCR speed and accuracy."""
     try:
         if os.name == "nt" and not os.path.exists(getattr(pytesseract.pytesseract, "tesseract_cmd", "")):
             fallback_path = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
@@ -1055,36 +1179,37 @@ def extract_text_from_image(image_file):
                 pytesseract.pytesseract.tesseract_cmd = fallback_path
 
         processed_images = preprocess_image_for_ocr(image_file)
-        detected_lang = detect_image_language(image_file)
-        language_candidates = []
-        for lang in [detected_lang, SUPPORTED_LANGS, "eng+hin", "eng+ben", "eng"]:
-            if lang not in language_candidates:
-                language_candidates.append(lang)
-
-        configs = ["--oem 3 --psm 6", "--oem 3 --psm 11", "--oem 3 --psm 12"]
+        ocr_language = normalize_ocr_language(selected_language)
+        image_variants = [
+            processed_images["adaptive"],
+            processed_images["otsu"],
+            processed_images["denoised"],
+        ]
         best_text = ""
         best_score = -1
         last_error = None
 
-        for image_name in ["median", "adaptive", "otsu", "gray"]:
-            image_variant = processed_images[image_name]
-            for lang in language_candidates:
-                for config in configs:
-                    try:
-                        extracted = pytesseract.image_to_string(image_variant, lang=lang, config=config)
-                    except Exception as exc:
-                        last_error = exc
-                        continue
+        for image_variant in image_variants:
+            try:
+                extracted = pytesseract.image_to_string(
+                    image_variant,
+                    lang=ocr_language,
+                    config=f"{FAST_OCR_CONFIG} -l {ocr_language}"
+                )
+            except Exception as exc:
+                last_error = exc
+                continue
 
-                    cleaned = clean_ocr_text(" ".join(extracted.split()).replace("|", "I"))
-                    structured_tokens = _recover_structured_tokens(cleaned)
-                    score = (
-                        len(re.findall(r"[A-Za-z\u0900-\u097f\u0980-\u09ff]{2,}", cleaned))
-                        + len(structured_tokens) * 4
-                    )
-                    if score > best_score:
-                        best_score = score
-                        best_text = cleaned
+            cleaned = clean_ocr_text(" ".join(extracted.split()).replace("|", "I"))
+            structured_tokens = _recover_structured_tokens(cleaned)
+            score = (
+                len(re.findall(r"[A-Za-z\u0900-\u097f\u0980-\u09ff]{2,}", cleaned))
+                + len(structured_tokens) * 4
+                + (15 if is_valid_text(cleaned) else 0)
+            )
+            if score > best_score:
+                best_score = score
+                best_text = cleaned
 
         if not best_text and last_error:
             return f"OCR Error: {last_error}"
@@ -1101,24 +1226,32 @@ def extract_text_from_image(image_file):
         return f"OCR Error: {exc}"
 
 
-def analyze_image_for_fraud(image_file):
+def analyze_image_for_fraud(image_file, selected_language="eng"):
     """Extract text from image and flag suspicious OCR content."""
-    extracted_text = extract_text_from_image(image_file)
+    extracted_text = extract_text_from_image(image_file, selected_language=selected_language)
     lower_text = (extracted_text or "").lower()
     fraud_keywords = [
-        "winner", "urgent", "verify", "otp", "lottery", "free", "claim", "reward",
-        "gift", "cashback", "account locked", "kyc", "subsidy",
+        "winner", "urgent", "verify", "otp", "lottery", "free money", "claim now",
+        "reward", "gift", "cashback", "account locked", "kyc update", "click link",
+        "limited time", "guaranteed cash", "prize", "free recharge",
     ]
     fraud_indicators = [keyword for keyword in fraud_keywords if keyword in lower_text]
 
     structured_tokens = _recover_structured_tokens(extracted_text)
-    if structured_tokens:
+    if structured_tokens and is_valid_text(extracted_text):
         fraud_indicators.extend([f"ocr_pattern::{token}" for token in structured_tokens])
+
+    clear_fraud_indicators = [item for item in fraud_indicators if not item.startswith("ocr_pattern::")]
+    has_clear_fraud_signal = len(clear_fraud_indicators) >= 2 or any(
+        keyword in lower_text for keyword in ["lottery", "winner", "free money", "guaranteed cash", "prize"]
+    )
 
     return {
         "text": extracted_text,
+        "is_valid_text": is_valid_text(extracted_text),
         "fraud_indicators": list(dict.fromkeys(fraud_indicators)),
-        "is_suspicious": bool([item for item in fraud_indicators if not item.startswith("ocr_pattern::")]),
+        "clear_fraud_indicators": clear_fraud_indicators,
+        "is_suspicious": has_clear_fraud_signal,
     }
 
 # ---------------- WEB SCRAPING FUNCTIONS ----------------
@@ -1128,6 +1261,41 @@ def is_valid_url(url):
         result = urlparse(url)
         return all([result.scheme, result.netloc])
     except:
+        return False
+
+def check_url_exists(url, timeout=5):
+    """Check whether a URL is reachable before deeper analysis."""
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'text/html,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+    }
+
+    try:
+        response = requests.head(
+            url,
+            headers=headers,
+            timeout=timeout,
+            allow_redirects=True,
+            verify=False
+        )
+        if response.status_code == 200:
+            return True
+
+        # Some sites reject HEAD but respond normally to GET.
+        if response.status_code in (403, 405):
+            response = requests.get(
+                url,
+                headers=headers,
+                timeout=timeout,
+                allow_redirects=True,
+                verify=False,
+                stream=True
+            )
+            return response.status_code == 200
+
+        return False
+    except requests.RequestException:
         return False
 
 def fetch_website_content(url, timeout=15):
@@ -1260,6 +1428,43 @@ def is_government_site(url, content=""):
     except:
         return False
 
+def is_genuine_brand(content):
+    """Check if content contains genuine agriculture brand or distributor names."""
+    if not content:
+        return False, None
+
+    content_lower = content.lower()
+    for brand in GENUINE_AGRICULTURE_BRANDS:
+        if brand in content_lower:
+            return True, brand
+
+    return False, None
+
+def is_agriculture_website(url, content_text=""):
+    """Check whether a website is actually related to agriculture or farming."""
+    agriculture_keywords = [
+        'farmer', 'kisan', 'agriculture', 'agri', 'farming', 'crop',
+        'fertilizer', 'pesticide', 'seed', 'soil', 'irrigation',
+        'mandi', 'kheti', 'pashu', 'dairy', 'poultry', 'horticulture',
+        'gov.in', 'nic.in', 'pmkisan', 'agriguard'
+    ]
+    supporting_domain_keywords = {'gov.in', 'nic.in'}
+    primary_keywords = [keyword for keyword in agriculture_keywords if keyword not in supporting_domain_keywords]
+
+    url_lower = (url or "").lower()
+    content_lower = (content_text or "").lower()
+
+    for keyword in primary_keywords:
+        if keyword in url_lower or keyword in content_lower:
+            return True
+
+    if any(keyword in url_lower for keyword in supporting_domain_keywords):
+        for keyword in primary_keywords:
+            if keyword in content_lower:
+                return True
+
+    return False
+
 # ---------------- FRAUD DETECTION FUNCTIONS ----------------
 def highlight_keywords(content):
     """Highlight keywords in the content for better visualization"""
@@ -1389,17 +1594,17 @@ def enhanced_check_fraud(content, url=None):
     
     # Determine result with enhanced logic
     if not found_agri:
-        return f"⚠️ Suspicious: Not related to agriculture{domain_warning}", confidence, []
+        return f"FRAUD DETECTED: Not related to agriculture{domain_warning}", confidence, []
     elif found_fraud and confidence < 30:
-        return f"🚨 High Risk Website Detected{domain_warning}", confidence, found_fraud
+        return f"FRAUD DETECTED{domain_warning}", confidence, found_fraud
     elif found_fraud:
-        return f"🚨 Potential Fraud Detected{domain_warning}", confidence, found_fraud
+        return f"FRAUD DETECTED{domain_warning}", confidence, found_fraud
     elif confidence >= 70:
-        return f"✅ Website Looks Safe{domain_warning}", confidence, []
+        return f"GENUINE / SAFE{domain_warning}", confidence, []
     elif confidence >= 40:
-        return f"⚠️ Website Needs Review{domain_warning}", confidence, []
+        return f"FRAUD DETECTED{domain_warning}", confidence, []
     else:
-        return f"🚨 High Risk Website{domain_warning}", confidence, []
+        return f"FRAUD DETECTED{domain_warning}", confidence, []
 
 # ---------------- ENHANCED FRAUD DETECTION WITH ML ----------------
 def enhanced_check_fraud_with_ml(content, url=None):
@@ -1435,27 +1640,27 @@ def enhanced_check_fraud_with_ml(content, url=None):
         # Determine final result
         if "🚨" in ml_result:
             if ml_confidence >= 0.95:
-                final_result = "🚨 AI Confirmed: High Fraud Risk"
+                final_result = "FRAUD DETECTED"
                 final_confidence = min(100, max(final_confidence, ml_confidence_percent))
             elif "🚨" in rule_result:
-                final_result = "🚨 AI Confirmed: High Fraud Risk"
+                final_result = "FRAUD DETECTED"
                 final_confidence = min(100, final_confidence * 1.1)
             else:
-                final_result = "⚠️ AI Suspects Fraud (Rules: OK)"
+                final_result = "FRAUD DETECTED"
         elif "✅" in ml_result:
             if "✅" in rule_result:
-                final_result = "✅ AI Confirmed: Likely Genuine"
+                final_result = "GENUINE / SAFE"
                 final_confidence = max(0, final_confidence * 0.9)
             else:
-                final_result = "⚠️ AI: Genuine (Rules: Suspicious)"
+                final_result = "FRAUD DETECTED"
         else:
             # ML says neutral
             if "🚨" in rule_result:
-                final_result = "⚠️ Rules: Fraud (AI: Neutral)"
+                final_result = "FRAUD DETECTED"
             elif "✅" in rule_result:
-                final_result = "⚠️ Rules: Genuine (AI: Neutral)"
+                final_result = "GENUINE / SAFE"
             else:
-                final_result = "⚠️ Both Methods: Needs Review"
+                final_result = "FRAUD DETECTED"
         
         # Get ML explanation if confidence is low
         ml_explanation = []
@@ -1790,43 +1995,59 @@ def login():
         return render_template("login.html")
 
     try:
-        conn = sqlite3.connect("users.db")
-        c = conn.cursor()
-        
-        # Check if user exists with given identifier and password
-        c.execute("""
-            SELECT * FROM users 
-            WHERE (username = ? OR email = ? OR mobile = ?) AND password = ?
-        """, (identifier, identifier, identifier, password))
-        
-        user = c.fetchone()
+        conn = get_mysql_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        cursor.execute(
+            "SELECT * FROM users WHERE username = %s OR email = %s OR mobile = %s",
+            (identifier, identifier, identifier)
+        )
+        user = cursor.fetchone()
+        cursor.close()
         conn.close()
 
+        print(f"🔐 Login attempt: {identifier}")
+
         if user:
-            # Check if trying to login as admin through regular login
-            account_type = user[10] if len(user) > 10 else 'standard'
-            if account_type == 'admin' or user[1] == 'admin':
-                flash("Please use Admin Login for administrator access", "warning")
-                return redirect("/admin-login")
-            
-            # Store user info in session
-            session["user_id"] = user[0]
-            session["username"] = user[1]
-            session["email"] = user[2]
-            session["mobile"] = user[3]
-            session["user"] = user[1]
-            session["account_type"] = account_type
-            
-            # Log activity
-            log_user_activity(user[0], 'User Login', 'Logged into the system', 'auth')
-            
-            flash(f"Welcome back, {user[1]}!", "success")
-            return redirect("/language")
+            print(f"User found: {user['username']}, Role: {user['role']}")
+            if check_password_hash(user['password'], password):
+                # Clear existing session
+                session.clear()
+                
+                # Set session variables
+                session["user_id"] = user['id']
+                session["username"] = user['username']
+                session["email"] = user['email']
+                session["mobile"] = user['mobile']
+                session["user"] = user['username']
+                session["role"] = user['role']
+                session["logged_in"] = True
+                
+                # Force session save
+                session.modified = True
+
+                print(f"✅ Login successful: {user['username']}, Role: {user['role']}")
+                print(f"Session role set to: {session.get('role')}")
+                print(f"Session keys: {list(session.keys())}")
+                
+                log_user_activity(user['id'], 'User Login', 'Logged into the system', 'auth')
+
+                flash(f"Welcome back, {user['username']}!", "success")
+                if user['role'].lower() == 'admin':
+                    print(f"Redirecting to admin dashboard")
+                    return redirect('/admin')
+                return redirect('/language')
+            else:
+                print(f"Password mismatch for {identifier}")
+                flash("Invalid password!", "error")
+                return render_template("login.html")
         else:
+            print(f"User not found: {identifier}")
             flash("Invalid username/email/mobile or password", "error")
             return render_template("login.html")
-            
+
     except Exception as e:
+        print(f"Login error: {e}")
         flash(f"Login error: {str(e)}", "error")
         return render_template("login.html")
 
@@ -1836,66 +2057,113 @@ def admin_login():
     """Admin-specific login route"""
     # If already logged in as admin, redirect to admin panel
     if 'user_id' in session:
-        if session.get('account_type') == 'admin' or session.get('username') == 'admin':
+        if session.get('role') == 'admin' or session.get('username') == 'admin':
             return redirect('/admin')
-    
+
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "").strip()
-        
+
         if not username or not password:
             flash("Please enter both username and password", "error")
             return render_template("admin_login.html")
-        
+
         try:
-            conn = sqlite3.connect("users.db")
-            c = conn.cursor()
-            
+            # Connect to MySQL database
+            conn = mysql.connector.connect(
+                host=os.getenv("MYSQL_HOST", "127.0.0.1"),
+                port=int(os.getenv("MYSQL_PORT", 3306)),
+                user=os.getenv("MYSQL_USER", "root"),
+                password=os.getenv("MYSQL_PASSWORD", "root"),
+                database=os.getenv("MYSQL_DB_USERS", "social_media_fraud_users")
+            )
+            cursor = conn.cursor(dictionary=True)
+
             # Check if user exists and is admin
-            c.execute("""
-                SELECT * FROM users 
-                WHERE username = ? AND password = ? 
-                AND (account_type = 'admin' OR username = 'admin')
-            """, (username, password))
-            
-            user = c.fetchone()
+            cursor.execute("""
+                SELECT * FROM users
+                WHERE username = %s AND role = 'admin'
+            """, (username,))
+
+            user = cursor.fetchone()
             conn.close()
-            
+
             if user:
-                # Store user info in session
-                session["user_id"] = user[0]
-                session["username"] = user[1]
-                session["email"] = user[2]
-                session["mobile"] = user[3]
-                session["user"] = user[1]
-                session["account_type"] = user[10] if len(user) > 10 else 'standard'
-                
-                # Log activity
-                log_user_activity(user[0], 'Admin Login', 'Logged into admin panel', 'auth')
-                
-                flash(f"Welcome, Administrator {user[1]}!", "success")
-                return redirect("/admin")
+                # Verify password hash
+                from werkzeug.security import check_password_hash
+                if check_password_hash(user['password'], password):
+                    # Store user info in session
+                    session["user_id"] = user['id']
+                    session["username"] = user['username']
+                    session["email"] = user['email']
+                    session["mobile"] = user['mobile']
+                    session["user"] = user['username']
+                    session["role"] = user['role']
+                    session["logged_in"] = True
+
+                    # Log activity
+                    log_user_activity(user['id'], 'Admin Login', 'Logged into admin panel', 'auth')
+
+                    flash(f"Welcome, Administrator {user['username']}!", "success")
+                    return redirect("/admin")
+                else:
+                    flash("Invalid admin credentials!", "error")
+                    return render_template("admin_login.html")
             else:
                 # Check if user exists but not admin
-                conn = sqlite3.connect("users.db")
-                c = conn.cursor()
-                c.execute("SELECT username FROM users WHERE username = ? AND password = ?", 
-                         (username, password))
-                regular_user = c.fetchone()
+                conn = mysql.connector.connect(
+                    host=os.getenv("MYSQL_HOST", "127.0.0.1"),
+                    port=int(os.getenv("MYSQL_PORT", 3306)),
+                    user=os.getenv("MYSQL_USER", "root"),
+                    password=os.getenv("MYSQL_PASSWORD", "root"),
+                    database=os.getenv("MYSQL_DB_USERS", "social_media_fraud_users")
+                )
+                cursor = conn.cursor(dictionary=True)
+                cursor.execute("SELECT username FROM users WHERE username = %s", (username,))
+                regular_user = cursor.fetchone()
                 conn.close()
-                
+
                 if regular_user:
                     flash("This account does not have admin privileges. Please use regular login.", "error")
                 else:
                     flash("Invalid admin credentials", "error")
-                
+
                 return render_template("admin_login.html")
-                
+
         except Exception as e:
             flash(f"Login error: {str(e)}", "error")
             return render_template("admin_login.html")
-    
+
     return render_template("admin_login.html")
+
+# ---------------- DEBUG ADMIN USERS ----------------
+@app.route('/check_admins')
+def check_admins():
+    """Debug route to check all admin users"""
+    try:
+        conn = mysql.connector.connect(
+            host=os.getenv("MYSQL_HOST", "127.0.0.1"),
+            port=int(os.getenv("MYSQL_PORT", 3306)),
+            user=os.getenv("MYSQL_USER", "root"),
+            password=os.getenv("MYSQL_PASSWORD", "root"),
+            database=os.getenv("MYSQL_DB_USERS", "social_media_fraud_users")
+        )
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT id, username, email, role FROM users WHERE role = 'admin'")
+        admins = cursor.fetchall()
+        conn.close()
+
+        if not admins:
+            return "<h1>No Admin Users Found</h1><p>No users with role='admin' in database.</p>"
+
+        html = "<h1>Admin Users in Database</h1><table border='1'><tr><th>ID</th><th>Username</th><th>Email</th><th>Role</th></tr>"
+        for admin in admins:
+            html += f"<tr><td>{admin['id']}</td><td>{admin['username']}</td><td>{admin['email']}</td><td>{admin['role']}</td></tr>"
+        html += "</table>"
+        return html
+
+    except Exception as e:
+        return f"<h1>Error</h1><p>Database error: {str(e)}</p>"
 
 # ---------------- REGISTER ----------------
 @app.route("/register", methods=["GET", "POST"])
@@ -1906,52 +2174,187 @@ def register():
         mobile = request.form.get("mobile", "").strip()
         password = request.form.get("password", "").strip()
         confirm_password = request.form.get("confirm_password", "").strip()
+        role = request.form.get("role", "farmer").strip().lower()
+        admin_key = request.form.get("admin_key", "").strip()
 
         # Validation
         if not all([username, email, mobile, password]):
             flash("All fields are required!", "error")
             return render_template("register.html")
-        
+
         if password != confirm_password:
             flash("Passwords do not match!", "error")
             return render_template("register.html")
-        
+
         if len(password) < 6:
             flash("Password must be at least 6 characters!", "error")
             return render_template("register.html")
 
+        correct_key = os.environ.get("ADMIN_SECRET_KEY", "AgriGuard@2025")
+        final_role = "farmer"
+
+        # Debug prints
+        print(f"DEBUG: Role selected: {role}")
+        print(f"DEBUG: Admin key entered: '{admin_key}'")
+        print(f"DEBUG: Correct key from .env: '{correct_key}'")
+        print(f"DEBUG: Keys match: {admin_key == correct_key}")
+
+        if role == "admin":
+            if not admin_key or admin_key != correct_key:
+                flash("Invalid admin registration key. Please contact the system administrator.", "error")
+                return render_template("register.html")
+            final_role = "admin"
+
+        print(f"DEBUG: Registering user {email} with selected role={role}, final_role={final_role}, admin_key_provided={'yes' if admin_key else 'no'}")
+
         try:
-            conn = sqlite3.connect("users.db")
-            c = conn.cursor()
-            c.execute(
-                "INSERT INTO users(username, email, mobile, password) VALUES (?, ?, ?, ?)",
-                (username, email, mobile, password)
+            conn = get_mysql_connection()
+            cursor = conn.cursor(dictionary=True)
+
+            # Verify that username/email/mobile are unique
+            cursor.execute(
+                "SELECT id, username, email, mobile FROM users WHERE username = %s OR email = %s OR mobile = %s",
+                (username, email, mobile)
             )
-            
-            # Update the new user with fullname
-            c.execute("UPDATE users SET fullname = ? WHERE username = ?", (username, username))
-            
+            existing_user = cursor.fetchone()
+            if existing_user:
+                cursor.close()
+                conn.close()
+                if existing_user['username'] == username:
+                    flash('Username already exists!', 'error')
+                elif existing_user['email'] == email:
+                    flash('Email already exists!', 'error')
+                else:
+                    flash('Mobile number already exists!', 'error')
+                return render_template('register.html')
+
+            # Hash password and insert user
+            hashed_password = generate_password_hash(password)
+            cursor.execute(
+                "INSERT INTO users (username, email, mobile, password, role) VALUES (%s, %s, %s, %s, %s)",
+                (username, email, mobile, hashed_password, final_role)
+            )
             conn.commit()
+
+            # Verify insertion
+            cursor.execute("SELECT id, username, role FROM users WHERE username = %s", (username,))
+            new_user = cursor.fetchone()
+            cursor.close()
             conn.close()
-            
-            flash("Registration successful! Please login.", "success")
-            return redirect("/login-selector")
-        except sqlite3.IntegrityError as e:
-            error_msg = str(e)
-            if "username" in error_msg:
-                flash("Username already exists!", "error")
-            elif "email" in error_msg:
-                flash("Email already exists!", "error")
-            elif "mobile" in error_msg:
-                flash("Mobile number already exists!", "error")
+
+            if new_user:
+                print(f"✅ User saved: {new_user['username']}, Role: {new_user['role']}")
+                flash(f'Registration successful! Registered as {final_role}.', 'success')
+                return redirect('/login-selector')
             else:
-                flash("User already exists!", "error")
-            return render_template("register.html")
+                print("❌ User NOT saved to database!")
+                flash('Registration failed. Please try again.', 'error')
+                return render_template('register.html')
+
+        except mysql.connector.IntegrityError as e:
+            conn.rollback()
+            cursor.close()
+            conn.close()
+            error_msg = str(e)
+            if "username" in error_msg.lower():
+                flash('Username already exists!', 'error')
+            elif "email" in error_msg.lower():
+                flash('Email already exists!', 'error')
+            elif "mobile" in error_msg.lower():
+                flash('Mobile number already exists!', 'error')
+            else:
+                flash('User already exists!', 'error')
+            return render_template('register.html')
         except Exception as e:
+            if conn.is_connected():
+                conn.rollback()
+            try:
+                cursor.close()
+            except Exception:
+                pass
+            try:
+                conn.close()
+            except Exception:
+                pass
+            print(f"Registration failed: {e}")
             flash(f"Registration failed: {str(e)}", "error")
-            return render_template("register.html")
-    
+            return render_template('register.html')
+
     return render_template("register.html")
+
+# ---------------- DEBUG KEY ROUTE ----------------
+@app.route('/debug_key')
+def debug_key():
+    key = os.getenv('ADMIN_SECRET_KEY', 'NOT FOUND')
+    return f"""
+    <h1>Admin Secret Key Debug</h1>
+    <p>Admin Secret Key from .env: '<strong>{key}</strong>'</p>
+    <p>Length: {len(key)}</p>
+    <p>Expected: 'AgriGuard@2025'</p>
+    <p>Match: {'✅ YES' if key == 'AgriGuard@2025' else '❌ NO'}</p>
+    <br>
+    <a href="/">Back to Home</a>
+    """
+
+# ---------------- DEBUG USERS ROUTE ----------------
+@app.route('/debug_users')
+def debug_users():
+    try:
+        conn = get_mysql_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT id, username, email, mobile, role, created_at FROM users ORDER BY id")
+        users = cursor.fetchall()
+        cursor.close()
+        conn.close()
+
+        if not users:
+            return "<h3>No users found in database!</h3>"
+
+        html = "<h3>Users in Database:</h3><ul>"
+        for user in users:
+            html += f"<li>ID: {user['id']}, Username: {user['username']}, Email: {user['email']}, Mobile: {user['mobile']}, Role: {user['role']}</li>"
+        html += "</ul>"
+        return html
+    except Exception as e:
+        return f"<h1>Error accessing database</h1><p>{str(e)}</p>"
+
+# ---------------- DEBUG SESSION ROUTE ----------------
+@app.route('/check_session')
+def check_session():
+    """Debug route to verify session values"""
+    session_data = dict(session)
+    print(f"\n========== SESSION DEBUG ==========")
+    print(f"Session data: {session_data}")
+    print(f"user_id: {session.get('user_id')}")
+    print(f"username: {session.get('username')}")
+    print(f"role: {session.get('role')}")
+    print(f"logged_in: {session.get('logged_in')}")
+    print(f"====================================\n")
+    
+    html = f"""
+    <html>
+    <head><title>Session Debug</title></head>
+    <body style="font-family: monospace; padding: 20px;">
+    <h1>Session Debug Information</h1>
+    <h2>Current Session:</h2>
+    <ul>
+        <li><strong>Logged In:</strong> {session.get('logged_in')}</li>
+        <li><strong>User ID:</strong> {session.get('user_id')}</li>
+        <li><strong>Username:</strong> {session.get('username')}</li>
+        <li><strong>Email:</strong> {session.get('email')}</li>
+        <li><strong>Role:</strong> {session.get('role')}</li>
+        <li><strong>All Session Keys:</strong> {list(session.keys())}</li>
+    </ul>
+    <h2>Mock Admin Check:</h2>
+    <ul>
+        <li><strong>Is Admin (role=='admin'):</strong> {str(session.get('role', '').lower() == 'admin')}</li>
+    </ul>
+    <hr>
+    <a href="/login-selector">Back to Login</a> | <a href="/admin">Try Admin</a>
+    </body>
+    </html>
+    """
+    return html
 
 # ---------------- FORGOT PASSWORD ROUTES ----------------
 @app.route("/forgot-password", methods=["GET", "POST"])
@@ -2194,11 +2597,42 @@ def detect():
     confidence = 0
     content = ""
     highlighted_content = ""
+    detailed_message = ""
     found_keywords = []
     ml_explanation = []
     detection_method = "Rule-Based"
     analyzed_url = ""
     generated_at = datetime.now()
+
+    def normalize_detection_result(raw_result, raw_confidence, url_to_check="", content_text=""):
+        """Apply the final display thresholds for the detect page."""
+        is_genuine, brand_name = is_genuine_brand(f"{url_to_check} {content_text}".strip())
+        if is_genuine:
+            return (
+                "GENUINE / SAFE",
+                95,
+                f"Genuine agriculture product or website detected from {brand_name.upper()}. This appears to be an authentic fertilizer, distributor, or agriculture-related source."
+            )
+
+        if url_to_check and not is_agriculture_website(url_to_check, content_text):
+            return (
+                "NOT AGRI-RELATED",
+                30,
+                "This website is not related to agriculture or farming. AgriGuard only verifies agriculture-related content."
+            )
+
+        gov_check = check_government_domain_first(url_to_check, content_text) if url_to_check else None
+        if gov_check:
+            return (
+                "GENUINE / SAFE",
+                max(raw_confidence, gov_check["confidence"]),
+                "This agriculture-related government website appears legitimate and safe."
+            )
+
+        if raw_confidence >= 55:
+            return "GENUINE / SAFE", raw_confidence, "This agriculture-related website appears legitimate and safe."
+
+        return "FRAUD DETECTED", raw_confidence, "Potential fraud indicators were detected for this agriculture-related website."
     
     if request.method == "POST":
         print("="*60)
@@ -2240,24 +2674,59 @@ def detect():
             input_type = 'link'
             analyzed_url = link_input
             print("✅ Detected: LINK input")
+
+            is_genuine, brand_name = is_genuine_brand(link_input)
+            if is_genuine:
+                result = "GENUINE / SAFE"
+                confidence = 95
+                detailed_message = f"Genuine agriculture product or website detected from {brand_name.upper()}. This appears to be an authentic fertilizer, distributor, or agriculture-related source."
+                content = f"URL: {link_input}\n\nRecognized genuine agriculture brand/distributor domain."
+                highlighted_content = highlight_keywords(content)
+                found_keywords = [brand_name]
+                ml_explanation = []
+                detection_method = "Brand Whitelist"
+
+                log_scan_with_method(
+                    session["user_id"],
+                    "url",
+                    content,
+                    result,
+                    confidence,
+                    detection_method
+                )
+
+                flash("✅ Genuine agriculture brand website detected.", "success")
+                return render_template("detect.html",
+                                     result=result,
+                                     confidence=confidence,
+                                     content=content,
+                                     highlighted_content=highlighted_content,
+                                     detailed_message=detailed_message,
+                                     found_keywords=found_keywords,
+                                     ml_explanation=ml_explanation,
+                                     detection_method=detection_method,
+                                     analyzed_url=analyzed_url,
+                                     generated_at=generated_at,
+                                     ml_available=ML_AVAILABLE)
             
             # ====== IMMEDIATE GOVERNMENT DOMAIN CHECK ======
-            # Check for .gov.in domains BEFORE any processing
-            url_lower = link_input.lower()
-            if False and ('.gov.in' in url_lower or '.nic.in' in url_lower):
-                print("🎯 Government domain detected - Returning 98% genuine")
-                result = "✅ GENUINE - Government Website"
-                confidence = 98.5
-                highlighted_content = f"URL: {link_input}\n\nGovernment domain detected (.gov.in/.nic.in)"
+            gov_check = check_government_domain_first(link_input)
+            if gov_check and is_agriculture_website(link_input):
+                print("🎯 Trusted government domain detected - Returning genuine result")
+                result = "GENUINE / SAFE"
+                confidence = gov_check["confidence"]
+                detailed_message = "This agriculture-related government website appears legitimate and safe."
+                content = f"URL: {link_input}\n\nTrusted government website detected."
+                highlighted_content = highlight_keywords(content)
                 found_keywords = []
                 ml_explanation = []
-                detection_method = "Rule-Based (Government Domain)"
+                detection_method = "Rule-Based (Trusted Government Domain)"
                 
                 # Log to database
                 log_scan_with_method(
                     session["user_id"],
                     "url",
-                    link_input,
+                    content,
                     result,
                     confidence,
                     detection_method
@@ -2269,8 +2738,9 @@ def detect():
                 return render_template("detect.html", 
                                      result=result,
                                      confidence=confidence,
-                                     content=link_input,
+                                     content=content,
                                      highlighted_content=highlighted_content,
+                                     detailed_message=detailed_message,
                                      found_keywords=found_keywords,
                                      ml_explanation=ml_explanation,
                                      detection_method=detection_method,
@@ -2284,6 +2754,7 @@ def detect():
         # Now process based on detected input type
         if input_type == 'image':
             print("🔄 Processing IMAGE...")
+            ocr_language = normalize_ocr_language(session.get("language", "en"))
             
             # Check file type
             allowed_extensions = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'}
@@ -2295,7 +2766,7 @@ def detect():
             
             # Extract text from image
             try:
-                image_analysis = analyze_image_for_fraud(image_file)
+                image_analysis = analyze_image_for_fraud(image_file, selected_language=ocr_language)
                 content = image_analysis["text"]
                 print(f"📄 OCR extracted {len(content)} characters")
                 print(f"📄 First 100 chars: {content[:100]}")
@@ -2303,6 +2774,105 @@ def detect():
                 if not content or content.startswith("OCR Error"):
                     flash("❌ Could not extract text from image. Please try a clearer image.", "error")
                     return render_template("detect.html")
+
+                # FIRST check if agriculture related
+                is_agri = is_agriculture_related(content)
+                if not is_agri:
+                    result = "⚠️ NOT AGRI-RELATED"
+                    confidence = 30
+                    detailed_message = "This image does not appear to be related to agriculture or farming. AgriGuard specializes in detecting fraud in agricultural advertisements, fertilizers, seeds, and government schemes."
+                    found_keywords = []
+                    ml_explanation = []
+                    detection_method = "Agriculture Relevance Check"
+                    highlighted_content = highlight_keywords(content)
+
+                    log_scan_with_method(
+                        session["user_id"],
+                        "image",
+                        content,
+                        result,
+                        confidence,
+                        detection_method
+                    )
+
+                    flash("⚠️ Non-agriculture content detected.", "warning")
+                    return render_template("detect.html",
+                                         result=result,
+                                         confidence=confidence,
+                                         content=content,
+                                         highlighted_content=highlighted_content,
+                                         detailed_message=detailed_message,
+                                         found_keywords=found_keywords,
+                                         ml_explanation=ml_explanation,
+                                         detection_method=detection_method,
+                                         analyzed_url=analyzed_url,
+                                         generated_at=generated_at,
+                                         ml_available=ML_AVAILABLE)
+
+                is_genuine, brand_name = is_genuine_brand(content)
+                if is_genuine:
+                    result = "GENUINE / SAFE"
+                    confidence = 95
+                    detailed_message = f"Genuine agriculture product detected from {brand_name.upper()}. This appears to be an authentic fertilizer/advertisement."
+                    found_keywords = [brand_name]
+                    ml_explanation = []
+                    detection_method = "Brand Whitelist"
+                    highlighted_content = highlight_keywords(content)
+
+                    log_scan_with_method(
+                        session["user_id"],
+                        "image",
+                        content,
+                        result,
+                        confidence,
+                        detection_method
+                    )
+
+                    flash("✅ Genuine agriculture brand detected in image.", "success")
+                    return render_template("detect.html",
+                                         result=result,
+                                         confidence=confidence,
+                                         content=content,
+                                         highlighted_content=highlighted_content,
+                                         detailed_message=detailed_message,
+                                         found_keywords=found_keywords,
+                                         ml_explanation=ml_explanation,
+                                         detection_method=detection_method,
+                                         analyzed_url=analyzed_url,
+                                         generated_at=generated_at,
+                                         ml_available=ML_AVAILABLE)
+
+                if not image_analysis["is_valid_text"]:
+                    result = "IMAGE NOT CLEAR"
+                    confidence = 40
+                    detailed_message = "Could not read text clearly from image. Please upload a clearer image or type the text manually."
+                    found_keywords = []
+                    ml_explanation = []
+                    detection_method = "OCR Validation"
+                    highlighted_content = highlight_keywords(content)
+
+                    log_scan_with_method(
+                        session["user_id"],
+                        "image",
+                        content,
+                        result,
+                        confidence,
+                        detection_method
+                    )
+
+                    flash("⚠️ Image text could not be read clearly. Please try a clearer image.", "warning")
+                    return render_template("detect.html",
+                                         result=result,
+                                         confidence=confidence,
+                                         content=content,
+                                         highlighted_content=highlighted_content,
+                                         detailed_message=detailed_message,
+                                         found_keywords=found_keywords,
+                                         ml_explanation=ml_explanation,
+                                         detection_method=detection_method,
+                                         analyzed_url=analyzed_url,
+                                         generated_at=generated_at,
+                                         ml_available=ML_AVAILABLE)
                 
                 # Analyze the content with ML if available
                 if ML_AVAILABLE:
@@ -2319,13 +2889,24 @@ def detect():
                         for indicator in image_analysis["fraud_indicators"]
                     ]
                     ml_explanation = (ml_explanation or []) + image_explanation
-                    if image_analysis["is_suspicious"] and "Fraud" not in result and "Suspicious" not in result:
-                        result = "⚠️ OCR Found Suspicious Text"
-                        confidence = max(confidence, 65)
+                    if image_analysis["is_suspicious"]:
+                        result = "FRAUD DETECTED"
+                        confidence = max(confidence, 75)
+                        detailed_message = "Clear fraud indicators were found in the extracted image text."
+                    elif not found_keywords and confidence < 55:
+                        result = "IMAGE NOT CLEAR"
+                        confidence = 40
+                        detailed_message = "The image text was partially readable, but not clear enough for a reliable fraud decision."
+                elif confidence < 45:
+                    result = "IMAGE NOT CLEAR"
+                    confidence = 40
+                    detailed_message = "The image text was too weak or noisy for a reliable fraud decision."
                 
                 highlighted_content = highlight_keywords(content)
-                
-                flash("✅ Image processed successfully! Fraud analysis completed.", "success")
+                if result == "IMAGE NOT CLEAR":
+                    flash("⚠️ Image text was not clear enough for a reliable decision.", "warning")
+                else:
+                    flash("✅ Image processed successfully! Fraud analysis completed.", "success")
                 
                 # Log to database
                 log_scan_with_method(
@@ -2349,6 +2930,74 @@ def detect():
                 return render_template("detect.html")
             
             content = text_input
+            
+            # FIRST check if agriculture related
+            is_agri = is_agriculture_related(content)
+            if not is_agri:
+                result = "⚠️ NOT AGRI-RELATED"
+                confidence = 30
+                detailed_message = "This text does not appear to be related to agriculture or farming. AgriGuard specializes in detecting fraud in agricultural advertisements, fertilizers, seeds, and government schemes."
+                found_keywords = []
+                ml_explanation = []
+                detection_method = "Agriculture Relevance Check"
+                highlighted_content = highlight_keywords(content)
+
+                log_scan_with_method(
+                    session["user_id"],
+                    "text",
+                    content,
+                    result,
+                    confidence,
+                    detection_method
+                )
+
+                flash("⚠️ Non-agriculture content detected.", "warning")
+                return render_template("detect.html",
+                                     result=result,
+                                     confidence=confidence,
+                                     content=content,
+                                     highlighted_content=highlighted_content,
+                                     detailed_message=detailed_message,
+                                     found_keywords=found_keywords,
+                                     ml_explanation=ml_explanation,
+                                     detection_method=detection_method,
+                                     analyzed_url=analyzed_url,
+                                     generated_at=generated_at,
+                                     ml_available=ML_AVAILABLE)
+            
+            # SECOND check if genuine brand
+            is_genuine, brand_name = is_genuine_brand(content)
+            if is_genuine:
+                result = "✓ GENUINE / SAFE"
+                confidence = 95
+                detailed_message = f"Genuine agriculture product detected from {brand_name.upper()}. This appears to be an authentic fertilizer, seed, or agriculture-related content."
+                found_keywords = [brand_name]
+                ml_explanation = []
+                detection_method = "Brand Whitelist"
+                highlighted_content = highlight_keywords(content)
+
+                log_scan_with_method(
+                    session["user_id"],
+                    "text",
+                    content,
+                    result,
+                    confidence,
+                    detection_method
+                )
+
+                flash("✅ Genuine agriculture brand detected in text.", "success")
+                return render_template("detect.html",
+                                     result=result,
+                                     confidence=confidence,
+                                     content=content,
+                                     highlighted_content=highlighted_content,
+                                     detailed_message=detailed_message,
+                                     found_keywords=found_keywords,
+                                     ml_explanation=ml_explanation,
+                                     detection_method=detection_method,
+                                     analyzed_url=analyzed_url,
+                                     generated_at=generated_at,
+                                     ml_available=ML_AVAILABLE)
             
             # Analyze the content with ML if available
             if ML_AVAILABLE:
@@ -2379,6 +3028,39 @@ def detect():
             if not is_valid_url(link_input):
                 flash("❌ Invalid URL. Please enter a valid URL starting with http:// or https://", "error")
                 return render_template("detect.html")
+
+            if not check_url_exists(link_input):
+                result = "FRAUD DETECTED"
+                confidence = 95
+                content = f"URL: {link_input}\n\nError: Website is unreachable or does not exist."
+                highlighted_content = highlight_keywords(content)
+                detailed_message = "Website is unreachable or does not exist. This is treated as a high-risk indicator."
+                found_keywords = ["unreachable-url"]
+                ml_explanation = []
+                detection_method = "URL Reachability Check"
+
+                log_scan_with_method(
+                    session["user_id"],
+                    "url",
+                    content,
+                    result,
+                    confidence,
+                    detection_method
+                )
+
+                flash("❌ Website could not be reached. Marked as fraud.", "error")
+                return render_template("detect.html",
+                                     result=result,
+                                     confidence=confidence,
+                                     content=content,
+                                     highlighted_content=highlighted_content,
+                                     detailed_message=detailed_message,
+                                     found_keywords=found_keywords,
+                                     ml_explanation=ml_explanation,
+                                     detection_method=detection_method,
+                                     analyzed_url=analyzed_url,
+                                     generated_at=generated_at,
+                                     ml_available=ML_AVAILABLE)
             
             flash("🌐 Fetching website content... Please wait.", "info")
             
@@ -2401,6 +3083,13 @@ def detect():
                     result, confidence, found_keywords = enhanced_check_fraud(content, link_input)
                     ml_explanation = []
                     detection_method = "Rule-Based"
+
+                result, confidence, detailed_message = normalize_detection_result(
+                    result,
+                    confidence,
+                    link_input,
+                    content
+                )
                 
                 highlighted_content = highlight_keywords(content)
                 
@@ -2431,6 +3120,7 @@ def detect():
                          confidence=confidence,
                          content=content,
                          highlighted_content=highlighted_content,
+                         detailed_message=detailed_message,
                          found_keywords=found_keywords or [],
                          ml_explanation=ml_explanation,
                          detection_method=detection_method,
@@ -2900,8 +3590,8 @@ def inject_user():
     """Inject user info into all templates"""
     is_admin = False
     if 'user_id' in session:
-        is_admin = (session.get('account_type') == 'admin' or 
-                   session.get('username') == 'admin')
+        user_role = session.get('role', 'farmer').lower()
+        is_admin = (user_role == 'admin')
     
     return dict(
         current_user=session.get("username"),
@@ -2971,96 +3661,769 @@ def tojson_filter(value, indent=None):
     return json.dumps(value, indent=indent, default=str)
 
 # ---------------- ADMIN ROUTES ----------------
-@app.route("/admin")
-@admin_required
-def admin_dashboard():
-    """Admin dashboard home"""
-    import sqlite3
-    from datetime import datetime, timedelta
-    
+
+def ensure_admin_tables():
+    conn = get_mysql_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS system_settings (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            setting_key VARCHAR(100) UNIQUE,
+            setting_value TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS admin_profile (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            user_id INT UNIQUE,
+            full_name VARCHAR(100),
+            profile_pic VARCHAR(255),
+            phone VARCHAR(15),
+            address TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS saved_reports (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            report_name VARCHAR(200),
+            report_type VARCHAR(50),
+            report_data JSON,
+            created_by INT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def initialize_admin_schema():
+    try:
+        ensure_admin_tables()
+    except Exception as e:
+        print(f"❌ Error initializing admin schema: {e}")
+
+
+def get_system_settings():
+    defaults = {
+        'site_name': 'AgriGuard',
+        'site_logo': '',
+        'contact_email': 'support@agriguard.com',
+        'contact_phone': '',
+        'support_email': 'support@agriguard.com',
+        'two_factor_authentication': 'off',
+        'session_timeout': '30',
+        'email_alerts': 'on',
+        'daily_summary_email': 'on',
+        'alert_threshold': '80',
+        'default_language': 'en',
+        'show_language_selector': 'on',
+        'admin_registration_key': os.getenv('ADMIN_SECRET_KEY', 'AgriGuard@2025'),
+        'fraud_sensitivity': 'Medium',
+        'auto_delete_days': '30'
+    }
+    settings = {}
+    conn = get_mysql_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT setting_key, setting_value FROM system_settings")
+    for row in cursor.fetchall():
+        settings[row['setting_key']] = row['setting_value']
+    cursor.close()
+    conn.close()
+    for key, value in defaults.items():
+        settings.setdefault(key, value)
+    return settings
+
+
+def set_system_setting(key, value):
+    conn = get_mysql_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO system_settings (setting_key, setting_value) VALUES (%s, %s) "
+        "ON DUPLICATE KEY UPDATE setting_value = %s",
+        (key, value, value)
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def get_admin_profile(user_id):
+    conn = get_mysql_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT u.id, u.username, u.email, u.mobile, u.role, u.created_at, u.fullname,
+               ap.full_name as profile_full_name, ap.profile_pic, ap.phone as profile_phone, ap.address
+        FROM users u
+        LEFT JOIN admin_profile ap ON ap.user_id = u.id
+        WHERE u.id = %s
+    """, (user_id,))
+    profile = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    if not profile:
+        return {}
+    profile['profile_pic'] = profile.get('profile_pic') or '/static/uploads/profile_pics/default-avatar.png'
+    profile['display_name'] = profile.get('profile_full_name') or profile.get('fullname') or profile.get('username')
+    return profile
+
+
+def fetch_report_chart_data():
+    chart_data = {
+        'fraud_vs_genuine': {
+            'labels': ['Fraud', 'Genuine'],
+            'data': [0, 0]
+        },
+        'daily_trend': {
+            'labels': [],
+            'fraud': [],
+            'genuine': []
+        },
+        'top_fraud_types': {
+            'labels': [],
+            'data': []
+        },
+        'registrations_over_time': {
+            'labels': [],
+            'data': []
+        }
+    }
+    try:
+        conn = sqlite3.connect('users.db')
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT
+                COUNT(*) as total,
+                SUM(CASE WHEN LOWER(result) LIKE '%fraud%' OR LOWER(result) LIKE '%risk%' THEN 1 ELSE 0 END) as fraud_count
+            FROM scans
+        """)
+        row = cursor.fetchone()
+        total = row['total'] or 0
+        fraud = row['fraud_count'] or 0
+        chart_data['fraud_vs_genuine']['data'] = [fraud, total - fraud]
+
+        cursor.execute("""
+            SELECT DATE(created_at) as day,
+                   SUM(CASE WHEN LOWER(result) LIKE '%fraud%' OR LOWER(result) LIKE '%risk%' THEN 1 ELSE 0 END) as fraud_count,
+                   COUNT(*) - SUM(CASE WHEN LOWER(result) LIKE '%fraud%' OR LOWER(result) LIKE '%risk%' THEN 1 ELSE 0 END) as genuine_count
+            FROM scans
+            GROUP BY DATE(created_at)
+            ORDER BY DATE(created_at) ASC
+            LIMIT 30
+        """)
+        for row in cursor.fetchall():
+            chart_data['daily_trend']['labels'].append(row['day'])
+            chart_data['daily_trend']['fraud'].append(row['fraud_count'] or 0)
+            chart_data['daily_trend']['genuine'].append(row['genuine_count'] or 0)
+
+        cursor.execute("""
+            SELECT content_type as label, COUNT(*) as count
+            FROM scans
+            WHERE LOWER(result) LIKE '%fraud%' OR LOWER(result) LIKE '%risk%'
+            GROUP BY content_type
+            ORDER BY count DESC
+            LIMIT 8
+        """)
+        for row in cursor.fetchall():
+            chart_data['top_fraud_types']['labels'].append(row['label'] or 'Unknown')
+            chart_data['top_fraud_types']['data'].append(row['count'] or 0)
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        print(f"Error fetching report chart data: {e}")
+
+    try:
+        conn = get_mysql_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT DATE(created_at) as day, COUNT(*) as count
+            FROM users
+            GROUP BY DATE(created_at)
+            ORDER BY DATE(created_at) ASC
+            LIMIT 30
+        """)
+        for row in cursor.fetchall():
+            chart_data['registrations_over_time']['labels'].append(row['day'])
+            chart_data['registrations_over_time']['data'].append(row['count'] or 0)
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        print(f"Error fetching registration chart data: {e}")
+
+    return chart_data
+
+
+def get_admin_context(active_section='dashboard'):
+    settings = get_system_settings()
+    profile = get_admin_profile(session['user_id'])
+    chart_data = fetch_report_chart_data()
+
     stats = {}
-    
-    # Get user statistics
-    conn = sqlite3.connect("users.db")
-    conn.row_factory = sqlite3.Row  # This makes rows accessible by column name
-    c = conn.cursor()
-    
-    # Total users
-    c.execute("SELECT COUNT(*) FROM users")
-    stats['total_users'] = c.fetchone()[0]
-    
-    # New users today
-    today = datetime.now().strftime('%Y-%m-%d')
-    c.execute("SELECT COUNT(*) FROM users WHERE DATE(created_at) = ?", (today,))
-    stats['new_users_today'] = c.fetchone()[0]
-    
-    # Total scans
-    c.execute("SELECT COUNT(*) FROM scans")
-    stats['total_scans'] = c.fetchone()[0]
-    
-    # Fraud scans
-    c.execute("SELECT COUNT(*) FROM scans WHERE result LIKE '%Fraud%' OR result LIKE '%Risk%'")
-    stats['fraud_scans'] = c.fetchone()[0]
-    
-    # Recent activities
-    c.execute("SELECT COUNT(*) FROM user_activity")
-    stats['total_activities'] = c.fetchone()[0]
-    
-    # Get recent scans WITH COLUMN NAMES
-    c.execute("""
-        SELECT s.*, u.username 
-        FROM scans s 
-        LEFT JOIN users u ON s.user_id = u.id 
-        ORDER BY s.created_at DESC 
+    conn = get_mysql_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT COUNT(*) as count FROM users")
+    stats['total_users'] = cursor.fetchone()['count']
+    cursor.execute("SELECT COUNT(*) as count FROM users WHERE role = 'admin'")
+    stats['total_admins'] = cursor.fetchone()['count']
+    cursor.execute("SELECT COUNT(*) as count FROM users WHERE role = 'farmer'")
+    stats['total_farmers'] = cursor.fetchone()['count']
+    cursor.close()
+    conn.close()
+
+    try:
+        conn_scans = sqlite3.connect('users.db')
+        cursor_scans = conn_scans.cursor()
+        cursor_scans.execute("SELECT COUNT(*) FROM scans")
+        stats['total_fraud_checks'] = cursor_scans.fetchone()[0] or 0
+        cursor_scans.close()
+        conn_scans.close()
+    except Exception as e:
+        print(f"Error counting scans: {e}")
+        stats['total_fraud_checks'] = 0
+
+    conn = get_mysql_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT id, username, email, mobile, role, created_at
+        FROM users
+        ORDER BY created_at DESC
         LIMIT 10
     """)
-    
-    recent_scans = []
-    for row in c.fetchall():
-        # Access by column name instead of index
-        recent_scans.append({
-            'id': row['id'],
-            'user_id': row['user_id'],
-            'username': row['username'] if row['username'] else f"User {row['user_id']}",
-            'content_type': row['content_type'],
-            'result': row['result'],
-            'confidence': row['confidence'],
-            'created_at': row['created_at']
-        })
-    
+    recent_users = cursor.fetchall()
+    cursor.execute("""
+        SELECT id, username, email, mobile, role, created_at
+        FROM users
+        ORDER BY created_at DESC
+    """)
+    all_users = cursor.fetchall()
+    cursor.close()
     conn.close()
-    
-    # Get system info
-    stats['current_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    
-    return render_template("admin_dashboard.html", 
-                         stats=stats, 
-                         recent_scans=recent_scans,
-                         is_admin=True)
+
+    fraud_checks = []
+    try:
+        conn_scans = sqlite3.connect('users.db')
+        conn_scans.row_factory = sqlite3.Row
+        cursor_scans = conn_scans.cursor()
+        cursor_scans.execute("""
+            SELECT s.id, s.user_id, s.content_type, s.content, s.result, s.confidence, s.created_at,
+                   u.username
+            FROM scans s
+            LEFT JOIN users u ON s.user_id = u.id
+            ORDER BY s.created_at DESC
+            LIMIT 50
+        """)
+        for row in cursor_scans.fetchall():
+            fraud_checks.append({
+                'id': row['id'],
+                'user_id': row['user_id'],
+                'username': row['username'] or 'Unknown',
+                'content_type': row['content_type'],
+                'content': row['content'],
+                'result': row['result'],
+                'confidence': row['confidence'],
+                'created_at': row['created_at']
+            })
+        cursor_scans.close()
+        conn_scans.close()
+    except Exception as e:
+        print(f"Error fetching fraud checks: {e}")
+
+    return {
+        'stats': stats,
+        'recent_users': recent_users or [],
+        'all_users': all_users or [],
+        'fraud_checks': fraud_checks or [],
+        'profile': profile,
+        'settings': settings,
+        'chart_data': chart_data,
+        'active_section': active_section,
+        'username': session.get('username')
+    }
+
+
+def get_admin_dashboard_context():
+    stats = {
+        'total_users': 0,
+        'admin_users': 0,
+        'farmer_users': 0,
+        'total_fraud_checks': 0,
+        'fraud_rate': 0.0
+    }
+    users = []
+    fraud_checks = []
+    error_message = None
+
+    try:
+        conn = get_mysql_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT id, username, email, mobile, role, created_at FROM users ORDER BY created_at DESC")
+        users = cursor.fetchall() or []
+
+        cursor.execute("""
+            SELECT
+                COUNT(*) AS total_users,
+                SUM(CASE WHEN LOWER(role) = 'admin' THEN 1 ELSE 0 END) AS admin_users,
+                SUM(CASE WHEN LOWER(role) = 'farmer' THEN 1 ELSE 0 END) AS farmer_users
+            FROM users
+        """)
+        counts = cursor.fetchone() or {}
+        stats['total_users'] = int(counts.get('total_users') or 0)
+        stats['admin_users'] = int(counts.get('admin_users') or 0)
+        stats['farmer_users'] = int(counts.get('farmer_users') or 0)
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        print(f"❌ Error loading admin users from MySQL: {e}")
+        error_message = "Unable to load user data from MySQL. Please check the database connection."
+
+    try:
+        conn_scan = sqlite3.connect('users.db')
+        conn_scan.row_factory = sqlite3.Row
+        cursor_scan = conn_scan.cursor()
+        cursor_scan.execute("""
+            SELECT
+                s.id,
+                s.user_id,
+                s.content,
+                s.result,
+                s.confidence,
+                s.created_at,
+                COALESCE(u.username, 'Anonymous') AS username
+            FROM scans s
+            LEFT JOIN users u ON s.user_id = u.id
+            ORDER BY s.created_at DESC
+            LIMIT 100
+        """)
+        fraud_checks = [dict(row) for row in cursor_scan.fetchall()]
+
+        cursor_scan.execute("""
+            SELECT
+                COUNT(*) AS total_checks,
+                SUM(CASE WHEN LOWER(result) LIKE '%fraud%' OR LOWER(result) LIKE '%risk%' THEN 1 ELSE 0 END) AS fraud_count
+            FROM scans
+        """)
+        fraud_counts = cursor_scan.fetchone() or {}
+        stats['total_fraud_checks'] = int(fraud_counts.get('total_checks') or 0)
+        fraud_count = int(fraud_counts.get('fraud_count') or 0)
+        if stats['total_fraud_checks'] > 0:
+            stats['fraud_rate'] = round((fraud_count / stats['total_fraud_checks']) * 100, 1)
+        cursor_scan.close()
+        conn_scan.close()
+    except Exception as e:
+        print(f"❌ Error loading fraud checks from SQLite: {e}")
+        if not error_message:
+            error_message = "Unable to load fraud check data. Please verify users.db exists and is accessible."
+
+    return {
+        'stats': stats,
+        'users': users,
+        'fraud_checks': fraud_checks,
+        'error_message': error_message
+    }
+
+
+@app.route('/admin')
+@admin_required
+def admin_dashboard():
+    context = get_admin_dashboard_context()
+    return render_template('admin_dashboard.html', **context)
+
+
+@app.route('/admin/profile')
+@admin_required
+def admin_profile():
+    return render_template('admin_dashboard.html', **get_admin_dashboard_context())
+
+
+@app.route('/admin/profile/update', methods=['POST'])
+@admin_required
+def update_admin_profile():
+    full_name = request.form.get('full_name', '').strip()
+    email = request.form.get('email', '').strip()
+    mobile = request.form.get('mobile', '').strip()
+    phone = request.form.get('phone', '').strip()
+    address = request.form.get('address', '').strip()
+    profile_pic = request.files.get('profile_pic')
+    user_id = session['user_id']
+    picture_path = None
+    if profile_pic and profile_pic.filename:
+        filename = secure_filename(profile_pic.filename)
+        upload_dir = os.path.join('static', 'uploads', 'profile_pics')
+        os.makedirs(upload_dir, exist_ok=True)
+        file_path = os.path.join(upload_dir, filename)
+        profile_pic.save(file_path)
+        picture_path = f"/static/uploads/profile_pics/{filename}"
+    try:
+        conn = get_mysql_connection()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE users SET fullname = %s, email = %s, mobile = %s WHERE id = %s", (full_name, email, mobile, user_id))
+        if picture_path:
+            cursor.execute(
+                "INSERT INTO admin_profile (user_id, full_name, profile_pic, phone, address) VALUES (%s, %s, %s, %s, %s) "
+                "ON DUPLICATE KEY UPDATE full_name = %s, profile_pic = %s, phone = %s, address = %s",
+                (user_id, full_name, picture_path, phone, address, full_name, picture_path, phone, address)
+            )
+        else:
+            cursor.execute(
+                "INSERT INTO admin_profile (user_id, full_name, phone, address) VALUES (%s, %s, %s, %s) "
+                "ON DUPLICATE KEY UPDATE full_name = %s, phone = %s, address = %s",
+                (user_id, full_name, phone, address, full_name, phone, address)
+            )
+        conn.commit()
+        cursor.close()
+        conn.close()
+        flash('Profile updated successfully.', 'success')
+    except Exception as e:
+        print(f"❌ Error updating profile: {e}")
+        flash('Failed to update profile.', 'danger')
+    return redirect(url_for('admin_profile'))
+
+
+@app.route('/admin/change-password', methods=['POST'])
+@admin_required
+def change_admin_password():
+    old_password = request.form.get('old_password', '').strip()
+    new_password = request.form.get('new_password', '').strip()
+    confirm_password = request.form.get('confirm_password', '').strip()
+    if not old_password or not new_password or not confirm_password:
+        flash('Please fill in all password fields.', 'danger')
+        return redirect(url_for('admin_profile'))
+    if new_password != confirm_password:
+        flash('New passwords do not match.', 'danger')
+        return redirect(url_for('admin_profile'))
+    try:
+        conn = get_mysql_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute('SELECT password FROM users WHERE id = %s', (session['user_id'],))
+        user = cursor.fetchone()
+        if not user or not check_password_hash(user['password'], old_password):
+            cursor.close()
+            conn.close()
+            flash('Old password is incorrect.', 'danger')
+            return redirect(url_for('admin_profile'))
+        hashed_password = generate_password_hash(new_password)
+        cursor.execute('UPDATE users SET password = %s WHERE id = %s', (hashed_password, session['user_id']))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        flash('Password changed successfully.', 'success')
+    except Exception as e:
+        print(f"❌ Error changing password: {e}")
+        flash('Failed to change password.', 'danger')
+    return redirect(url_for('admin_profile'))
+
+
+@app.route('/admin/settings')
+@admin_required
+def admin_settings():
+    return render_template('admin_dashboard.html', **get_admin_dashboard_context())
+
+
+@app.route('/admin/settings/update', methods=['POST'])
+@admin_required
+def update_settings():
+    try:
+        settings = get_system_settings()
+        site_name = request.form.get('site_name', settings['site_name']).strip()
+        contact_email = request.form.get('contact_email', settings['contact_email']).strip()
+        contact_phone = request.form.get('contact_phone', settings['contact_phone']).strip()
+        support_email = request.form.get('support_email', settings['support_email']).strip()
+        two_factor_authentication = request.form.get('two_factor_authentication', 'off')
+        session_timeout = request.form.get('session_timeout', settings['session_timeout']).strip()
+        email_alerts = request.form.get('email_alerts', settings['email_alerts'])
+        daily_summary_email = request.form.get('daily_summary_email', settings['daily_summary_email'])
+        alert_threshold = request.form.get('alert_threshold', settings['alert_threshold'])
+        default_language = request.form.get('default_language', settings['default_language'])
+        show_language_selector = request.form.get('show_language_selector', settings['show_language_selector'])
+        fraud_sensitivity = request.form.get('fraud_sensitivity', settings['fraud_sensitivity'])
+        auto_delete_days = request.form.get('auto_delete_days', settings['auto_delete_days'])
+        setting_keys = {
+            'site_name': site_name,
+            'contact_email': contact_email,
+            'contact_phone': contact_phone,
+            'support_email': support_email,
+            'two_factor_authentication': two_factor_authentication,
+            'session_timeout': session_timeout,
+            'email_alerts': email_alerts,
+            'daily_summary_email': daily_summary_email,
+            'alert_threshold': alert_threshold,
+            'default_language': default_language,
+            'show_language_selector': show_language_selector,
+            'fraud_sensitivity': fraud_sensitivity,
+            'auto_delete_days': auto_delete_days
+        }
+        logo_file = request.files.get('site_logo')
+        if logo_file and logo_file.filename:
+            filename = secure_filename(logo_file.filename)
+            upload_dir = os.path.join('static', 'uploads', 'site_logo')
+            os.makedirs(upload_dir, exist_ok=True)
+            file_path = os.path.join(upload_dir, filename)
+            logo_file.save(file_path)
+            setting_keys['site_logo'] = f"/static/uploads/site_logo/{filename}"
+        for key, value in setting_keys.items():
+            set_system_setting(key, value)
+        flash('Settings updated successfully.', 'success')
+    except Exception as e:
+        print(f"❌ Error updating settings: {e}")
+        flash('Failed to update settings. Please try again.', 'danger')
+    return redirect(url_for('admin_settings'))
+
+
+@app.route('/admin/reports')
+@admin_required
+def admin_reports():
+    context = get_admin_dashboard_context()
+    context['report_types'] = ['fraud_summary', 'user_activity', 'detection_trends']
+    return render_template('admin_dashboard.html', **context)
+
+
+@app.route('/admin/get_users')
+@admin_required
+def admin_get_users():
+    try:
+        conn = get_mysql_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT id, username, email, mobile, role, created_at FROM users ORDER BY id DESC")
+        users = cursor.fetchall() or []
+        cursor.close()
+        conn.close()
+        return jsonify({'users': users})
+    except Exception as e:
+        print(f"❌ Error fetching users: {e}")
+        return jsonify({'users': []}), 500
+
+
+@app.route('/admin/get_fraud_checks')
+@admin_required
+def admin_get_fraud_checks():
+    try:
+        conn = sqlite3.connect('users.db')
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT s.id, s.user_id, s.content_type as input_type, s.content, s.result, s.confidence, s.created_at,
+                   u.username
+            FROM scans s
+            LEFT JOIN users u ON s.user_id = u.id
+            ORDER BY s.created_at DESC
+            LIMIT 50
+        """)
+        checks = []
+        for row in cursor.fetchall():
+            checks.append({
+                'id': row['id'],
+                'user_id': row['user_id'],
+                'username': row['username'] or 'Anonymous',
+                'input_type': row['input_type'] or 'Unknown',
+                'content': row['content'] or '',
+                'result': row['result'] or 'Unknown',
+                'confidence': row['confidence'] or 0,
+                'created_at': row['created_at']
+            })
+        cursor.close()
+        conn.close()
+        return jsonify({'checks': checks})
+    except Exception as e:
+        print(f"❌ Error fetching fraud checks: {e}")
+        return jsonify({'checks': []}), 500
+
+
+@app.route('/admin/get_settings')
+@admin_required
+def admin_get_settings():
+    settings = get_system_settings()
+    return jsonify({
+        'site_name': settings.get('site_name', 'AgriGuard'),
+        'contact_email': settings.get('contact_email', ''),
+        'contact_phone': settings.get('contact_phone', ''),
+        'admin_key': os.getenv('ADMIN_SECRET_KEY', '********')
+    })
+
+
+@app.route('/admin/save_settings', methods=['POST'])
+@admin_required
+def admin_save_settings():
+    data = request.get_json(silent=True) or {}
+    if not data:
+        return jsonify({'success': False, 'message': 'Invalid settings data'}), 400
+    try:
+        set_system_setting('site_name', data.get('site_name', 'AgriGuard'))
+        set_system_setting('contact_email', data.get('contact_email', ''))
+        set_system_setting('contact_phone', data.get('contact_phone', ''))
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f"❌ Error saving settings: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/admin/get_profile')
+@admin_required
+def admin_get_profile():
+    profile = get_admin_profile(session['user_id'])
+    return jsonify(profile)
+
+
+def generate_report_data(report_type='fraud_summary', date_from=None, date_to=None):
+    if report_type not in ['fraud_summary', 'user_activity', 'detection_trends']:
+        report_type = 'fraud_summary'
+    params = []
+    date_filter = ''
+    if date_from:
+        date_filter += ' AND DATE(created_at) >= ?'
+        params.append(date_from)
+    if date_to:
+        date_filter += ' AND DATE(created_at) <= ?'
+        params.append(date_to)
+    conn = sqlite3.connect('users.db')
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    if report_type == 'fraud_summary':
+        c.execute(f"""
+            SELECT DATE(created_at) as date,
+                   COUNT(*) as total_checks,
+                   SUM(CASE WHEN LOWER(result) LIKE '%fraud%' OR LOWER(result) LIKE '%risk%' THEN 1 ELSE 0 END) as fraud_count,
+                   COUNT(*) - SUM(CASE WHEN LOWER(result) LIKE '%fraud%' OR LOWER(result) LIKE '%risk%' THEN 1 ELSE 0 END) as genuine_count
+            FROM scans
+            WHERE 1=1 {date_filter}
+            GROUP BY DATE(created_at)
+            ORDER BY DATE(created_at) ASC
+        """, params)
+        rows = [dict(row) for row in c.fetchall()]
+        headers = ['date', 'total_checks', 'fraud_count', 'genuine_count']
+    elif report_type == 'user_activity':
+        c.execute(f"""
+            SELECT IFNULL(u.username, 'Unknown') as user_name,
+                   COUNT(s.id) as total_checks,
+                   SUM(CASE WHEN LOWER(s.result) LIKE '%fraud%' OR LOWER(s.result) LIKE '%risk%' THEN 1 ELSE 0 END) as frauds_found,
+                   MAX(s.created_at) as last_active
+            FROM scans s
+            LEFT JOIN users u ON u.id = s.user_id
+            WHERE 1=1 {date_filter}
+            GROUP BY u.id
+            ORDER BY total_checks DESC
+        """, params)
+        rows = [dict(row) for row in c.fetchall()]
+        headers = ['user_name', 'total_checks', 'frauds_found', 'last_active']
+    else:
+        c.execute(f"""
+            SELECT DATE(created_at) as date,
+                   SUM(CASE WHEN LOWER(result) LIKE '%fraud%' OR LOWER(result) LIKE '%risk%' THEN 1 ELSE 0 END) as fraud_count,
+                   COUNT(*) - SUM(CASE WHEN LOWER(result) LIKE '%fraud%' OR LOWER(result) LIKE '%risk%' THEN 1 ELSE 0 END) as genuine_count
+            FROM scans
+            WHERE 1=1 {date_filter}
+            GROUP BY DATE(created_at)
+            ORDER BY DATE(created_at) ASC
+        """, params)
+        rows = [dict(row) for row in c.fetchall()]
+        headers = ['date', 'fraud_count', 'genuine_count']
+    c.close()
+    conn.close()
+    return {'headers': headers, 'rows': rows}
+
+
+@app.route('/admin/reports/generate', methods=['POST'])
+@admin_required
+def generate_report():
+    report_type = request.form.get('report_type', 'fraud_summary')
+    date_from = request.form.get('date_from')
+    date_to = request.form.get('date_to')
+    report_data = generate_report_data(report_type, date_from, date_to)
+    return jsonify({'success': True, 'report_type': report_type, 'report_data': report_data})
+
+
+@app.route('/admin/reports/export/<string:export_format>/<string:report_type>')
+@admin_required
+def export_report(export_format, report_type):
+    date_from = request.args.get('date_from')
+    date_to = request.args.get('date_to')
+    report = generate_report_data(report_type, date_from, date_to)
+    filename = f"{report_type}_report.{export_format}"
+    if export_format not in ['csv', 'excel', 'pdf']:
+        return jsonify({'success': False, 'message': 'Unsupported export format'}), 400
+    if export_format in ['csv', 'excel']:
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(report['headers'])
+        for row in report['rows']:
+            writer.writerow([row.get(key, '') for key in report['headers']])
+        response = Response(output.getvalue(), mimetype='text/csv')
+        response.headers['Content-Disposition'] = f'attachment; filename={filename}'
+        return response
+    text_output = "\n".join([', '.join(report['headers'])] + [', '.join(str(row.get(key, '')) for key in report['headers']) for row in report['rows']])
+    response = Response(text_output, mimetype='application/pdf')
+    response.headers['Content-Disposition'] = f'attachment; filename={filename}'
+    return response
+
+
+@app.route('/admin/change_role/<int:user_id>', methods=['POST'])
+@admin_required
+def change_user_role(user_id):
+    try:
+        new_role = request.form.get('role', '').lower()
+        if new_role not in ['admin', 'farmer']:
+            return jsonify({'success': False, 'message': 'Invalid role'}), 400
+        if session['user_id'] == user_id and new_role != 'admin':
+            return jsonify({'success': False, 'message': 'Cannot remove your own admin role'}), 400
+        conn = get_mysql_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("UPDATE users SET role = %s WHERE id = %s", (new_role, user_id))
+        conn.commit()
+        cursor.execute("SELECT username, role FROM users WHERE id = %s", (user_id,))
+        user = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        flash(f"User {user['username']} role changed to {new_role.upper()}", 'success')
+        return jsonify({'success': True, 'message': f'Role changed to {new_role.upper()}', 'username': user['username'], 'new_role': new_role})
+    except Exception as e:
+        print(f"❌ Error changing user role: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/admin/delete_user/<int:user_id>', methods=['DELETE'])
+@admin_required
+def delete_user(user_id):
+    try:
+        if session['user_id'] == user_id:
+            return jsonify({'success': False, 'message': 'Cannot delete your own account'}), 400
+        conn = get_mysql_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT username FROM users WHERE id = %s", (user_id,))
+        user = cursor.fetchone()
+        if not user:
+            return jsonify({'success': False, 'message': 'User not found'}), 404
+        cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        flash(f"User {user['username']} has been deleted", 'success')
+        return jsonify({'success': True, 'message': f'User {user["username"]} deleted successfully'})
+    except Exception as e:
+        print(f"❌ Error deleting user: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
 
 @app.route("/admin/users")
 @admin_required
 def admin_users():
     """View all users"""
-    import sqlite3
-    
-    conn = sqlite3.connect("users.db")
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-    
-    c.execute("""
-        SELECT id, username, email, mobile, fullname, location, 
-               account_type, created_at, profile_pic
-        FROM users 
-        ORDER BY created_at DESC
-    """)
-    
-    users = []
-    for row in c.fetchall():
-        users.append(dict(row))
-    
-    conn.close()
-    
+    try:
+        conn = get_mysql_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT id, username, email, mobile, fullname, role, created_at
+            FROM users
+            ORDER BY created_at DESC
+        """)
+        users = cursor.fetchall()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        print(f"❌ Error fetching users for admin_users: {e}")
+        users = []
     return render_template("admin_users.html", users=users, is_admin=True)
 
 @app.route("/admin/scans")
@@ -3750,9 +5113,8 @@ def init_database_safely():
 
 def verify_databases():
     """Verify all MySQL schemas are working properly."""
-    print("\n" + "=" * 50)
-    print("VERIFYING DATABASES...")
-    print("=" * 50)
+    print("   Database verification skipped (using MySQL)")
+    return
 
     databases = [
         ("users.db", [
@@ -4034,10 +5396,14 @@ if __name__ == "__main__":
         print("Initializing AgriGuard database...")
         db_instance.init_database()
         
-        # Step 4: Create translation files if needed
+        # Step 4: Initialize admin schema directly
+        print("Initializing admin schema...")
+        initialize_admin_schema()
+        
+        # Step 5: Create translation files if needed
         create_translation_files()
         
-        # Step 5: Ensure database columns
+        # Step 6: Ensure database columns
         ensure_database_columns()
         
         print(f"\n✅ ML Model Available: {ML_AVAILABLE}")

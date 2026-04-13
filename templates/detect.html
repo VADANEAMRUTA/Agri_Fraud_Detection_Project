@@ -12,9 +12,135 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <!-- Custom CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .result-card-out-of-scope {
+            border-left: 5px solid #f59e0b;
+            background: linear-gradient(135deg, #fff7ed, #fffbeb);
+        }
+
+        .result-title-out-of-scope,
+        .scope-message {
+            color: #b45309;
+        }
+
+        .scope-message {
+            margin-top: 1rem;
+            padding: 0.85rem 1rem;
+            border-radius: 10px;
+            background: rgba(245, 158, 11, 0.12);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+
+        .scope-badge {
+            background: #f59e0b;
+            color: #fff;
+        }
+
+        .result-icon.not-agri i {
+            color: #f59e0b;
+        }
+
+        #loadingOverlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.45);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5rem;
+        }
+
+        .loading-panel {
+            width: min(420px, 100%);
+            background: #ffffff;
+            border-radius: 18px;
+            padding: 2rem;
+            box-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
+            text-align: center;
+        }
+
+        .loading-panel i {
+            color: #2e7d32;
+        }
+
+        .loading-title {
+            margin: 1rem 0 0.35rem;
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #1f2937;
+        }
+
+        .loading-subtitle {
+            margin-bottom: 1rem;
+            color: #6b7280;
+        }
+
+        .loading-step {
+            margin: 0;
+            font-weight: 600;
+            color: #b45309;
+        }
+
+        @media print {
+            body * {
+                visibility: hidden !important;
+            }
+
+            .result-card,
+            .result-card * {
+                visibility: visible !important;
+            }
+
+            .result-card {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                padding: 20px;
+                background: white;
+            }
+
+            .result-card::before {
+                content: "AgriGuard - Fraud Detection Report";
+                display: block;
+                font-size: 18px;
+                font-weight: bold;
+                text-align: center;
+                color: #2e7d32;
+                border-bottom: 2px solid #2e7d32;
+                margin-bottom: 15px;
+                padding-bottom: 10px;
+            }
+
+            .print-timestamp {
+                display: block;
+                margin-bottom: 1rem;
+                font-size: 0.95rem;
+                color: #374151;
+                text-align: center;
+            }
+
+            .navbar, nav, .dashboard-header, .footer, footer,
+            .card:first-of-type, form, .input-tabs,
+            .btn-group, .btn-primary, .btn-outline,
+            .card:last-of-type, #enhancedResults {
+                display: none !important;
+            }
+        }
+    </style>
 </head>
 <body>
     {% include 'navbar.html' %}
+
+    <div id="loadingOverlay">
+        <div class="loading-panel">
+            <i class="fas fa-spinner fa-spin fa-3x"></i>
+            <p class="loading-title">Processing image...</p>
+            <p class="loading-subtitle">This may take 10-15 seconds</p>
+            <p id="loadingStepText" class="loading-step">Step 1: Compressing image...</p>
+        </div>
+    </div>
     
     <div class="main-container">
         <div class="dashboard-header fade-in">
@@ -90,9 +216,11 @@
         <!-- Results Section -->
         <div id="results" class="mt-4">
             {% if result %}
-            <div class="result-card fade-in">
-                <div class="result-icon">
-                    {% if 'Genuine' in result or 'Safe' in result %}
+            <div class="result-card fade-in {% if 'NOT AGRI' in result or 'OUT OF SCOPE' in result %}result-card-out-of-scope{% endif %}">
+                <div class="result-icon {% if 'NOT AGRI' in result %}not-agri{% endif %}">
+                    {% if 'NOT AGRI' in result or 'OUT OF SCOPE' in result %}
+                        <i class="fas fa-seedling"></i>
+                    {% elif 'Genuine' in result or 'Safe' in result %}
                         <i class="fas fa-check-circle" style="color: #10b981;"></i>
                     {% elif 'Fraud' in result %}
                         <i class="fas fa-exclamation-triangle" style="color: #ef4444;"></i>
@@ -101,7 +229,7 @@
                     {% endif %}
                 </div>
                 
-                <h2 class="result-title">{{ result }}</h2>
+                <h2 class="result-title {% if 'NOT AGRI' in result or 'OUT OF SCOPE' in result %}result-title-out-of-scope{% endif %}">{{ result }}</h2>
                 
                 {% if confidence > 0 %}
                 <div class="mb-3">
@@ -111,12 +239,19 @@
                     </div>
                     <div class="progress" style="height: 20px;">
                         <div class="progress-bar 
-                            {% if confidence >= 70 %}bg-success
+                            {% if 'NOT AGRI' in result or 'OUT OF SCOPE' in result %}scope-badge
+                            {% elif confidence >= 70 %}bg-success
                             {% elif confidence >= 40 %}bg-warning
                             {% else %}bg-danger{% endif %}" 
                             style="width: {{ confidence }}%">
                         </div>
                     </div>
+                </div>
+                {% endif %}
+
+                {% if detailed_message %}
+                <div class="scope-message">
+                    {{ detailed_message }}
                 </div>
                 {% endif %}
                 
@@ -140,7 +275,7 @@
                     <a href="/detect" class="btn btn-secondary">
                         <i class="fas fa-redo"></i> Check Another
                     </a>
-                    <button class="btn btn-outline" onclick="window.print()">
+                    <button class="btn btn-outline" onclick="printOnlyResult()">
                         <i class="fas fa-print"></i> Print Result
                     </button>
                 </div>
@@ -149,18 +284,25 @@
         </div>
         
         <!-- Add to detect.html -->
+{% if result %}
 <div class="result-section">
     <h3>Detection Results</h3>
     
     <div class="result-card">
         <div class="result-header">
             <span class="result-text">{{ result }}</span>
-            <span class="confidence-badge">{{ confidence }}%</span>
+            <span class="confidence-badge {% if 'NOT AGRI' in result or 'OUT OF SCOPE' in result %}scope-badge{% endif %}">{{ confidence }}%</span>
         </div>
         
         <div class="method-indicator">
             <small>Method: {{ detection_method }}</small>
         </div>
+
+        {% if detailed_message %}
+        <div class="scope-message">
+            {{ detailed_message }}
+        </div>
+        {% endif %}
         
         {% if ml_explanation %}
         <div class="ml-explanation">
@@ -169,8 +311,15 @@
             <ul>
                 {% for item in ml_explanation %}
                 <li>
-                    <strong>{{ item.feature }}</strong> 
-                    (weight: {{ "%.3f"|format(item.weight) }})
+                    <strong>{{ item.feature }}</strong>
+                    {% if item.value %}
+                    : {{ item.value }}
+                    {% endif %}
+                    {% if item.weight is defined %}
+                    (importance: {{ "%.3f"|format(item.weight) }})
+                    {% elif item.importance is defined %}
+                    (importance: {{ "%.3f"|format(item.importance) }})
+                    {% endif %}
                 </li>
                 {% endfor %}
             </ul>
@@ -178,6 +327,7 @@
         {% endif %}
     </div>
 </div>
+{% endif %}
 
         <!-- Enhanced Results Section (for AJAX calls) -->
         <div id="enhancedResults" class="card mt-4" style="display: none;">
@@ -225,6 +375,42 @@
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             console.log('=== AGRIGUARD DETECTION SYSTEM ===');
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            const loadingStepText = document.getElementById('loadingStepText');
+            let loadingTimers = [];
+
+            function clearLoadingTimers() {
+                loadingTimers.forEach(timerId => clearTimeout(timerId));
+                loadingTimers = [];
+            }
+
+            function hideLoadingOverlay() {
+                clearLoadingTimers();
+                if (loadingOverlay) {
+                    loadingOverlay.style.display = 'none';
+                }
+            }
+
+            function showImageLoadingOverlay() {
+                if (!loadingOverlay) {
+                    return;
+                }
+
+                clearLoadingTimers();
+                loadingOverlay.style.display = 'flex';
+
+                if (loadingStepText) {
+                    loadingStepText.textContent = 'Step 1: Compressing image...';
+                    loadingTimers.push(setTimeout(() => {
+                        loadingStepText.textContent = 'Step 2: Extracting text...';
+                    }, 1800));
+                    loadingTimers.push(setTimeout(() => {
+                        loadingStepText.textContent = 'Step 3: Analyzing for fraud...';
+                    }, 5200));
+                }
+            }
+
+            window.addEventListener('load', hideLoadingOverlay);
             
             // ========== TAB SYSTEM ==========
             const tabBtns = document.querySelectorAll('.tab-btn');
@@ -365,15 +551,23 @@
                     const submitBtn = this.querySelector('button[type="submit"]');
                     if (submitBtn) {
                         const originalText = submitBtn.innerHTML;
-                        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzing...';
+                        const isImageFlow = activeTabId === 'image-tab';
+                        submitBtn.innerHTML = isImageFlow
+                            ? '<i class="fas fa-spinner fa-spin"></i> Processing image...'
+                            : '<i class="fas fa-spinner fa-spin"></i> Analyzing...';
                         submitBtn.disabled = true;
+
+                        if (isImageFlow) {
+                            showImageLoadingOverlay();
+                        }
                         
                         // Re-enable inputs after submission (in case of error)
                         setTimeout(() => {
+                            hideLoadingOverlay();
                             enableAllInputs();
                             submitBtn.innerHTML = originalText;
                             submitBtn.disabled = false;
-                        }, 8000);
+                        }, activeTabId === 'image-tab' ? 20000 : 8000);
                     }
                 });
             }
@@ -418,6 +612,7 @@
             
             const enhancedResults = document.getElementById('enhancedResults');
             if (enhancedResults) enhancedResults.style.display = 'none';
+            hideLoadingOverlay();
             
             // Reset to first tab
             activateTab('image');
@@ -425,6 +620,25 @@
             console.log('Form cleared');
         }
         
+        // ========== PRINT RESULT ==========
+        function printOnlyResult() {
+            const resultCard = document.querySelector('.result-card');
+            if (!resultCard) {
+                alert('No result available to print');
+                return;
+            }
+
+            let timestamp = resultCard.querySelector('.print-timestamp');
+            if (!timestamp) {
+                timestamp = document.createElement('div');
+                timestamp.className = 'print-timestamp';
+                resultCard.insertBefore(timestamp, resultCard.firstChild);
+            }
+            timestamp.textContent = `Report Generated: ${new Date().toLocaleString()}`;
+
+            window.print();
+        }
+
         // Function to activate tab (accessible globally)
         function activateTab(tabId) {
             const tabBtns = document.querySelectorAll('.tab-btn');

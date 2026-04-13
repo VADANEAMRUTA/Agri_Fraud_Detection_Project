@@ -1,0 +1,27 @@
+# Final check commands before GitHub push
+
+# 1. Confirm required files exist
+ls .gitignore .env.example requirements.txt setup_db.py README.md INSTALL.md install.bat install.sh verify_installation.py run.bat run.sh CHECKLIST.md test_installation_locally.md GITHUB_UPLOAD_GUIDE.md FINAL_CHECK_COMMANDS.txt
+
+# 2. Confirm model files exist
+ls models/fraud_detector_v2.pkl models/vectorizer_v2.pkl
+
+# 3. Verify .gitignore does not exclude .pkl files
+grep -n "\\*.pkl" .gitignore || echo ".pkl not excluded"
+
+# 4. Search for hardcoded D:\ paths
+grep -RIn "D:\\" . | head -20
+
+# 5. Check .env.example for required variables
+grep -n "MYSQL_HOST\|MYSQL_PORT\|MYSQL_USER\|MYSQL_PASSWORD\|MYSQL_DB_USERS\|MYSQL_DB_AGRIGUARD\|SECRET_KEY\|ADMIN_SECRET_KEY\|DEBUG\|PORT" .env.example
+
+# 6. Validate setup_db.py contains database creation logic
+grep -n "CREATE DATABASE IF NOT EXISTS\|CREATE TABLE IF NOT EXISTS\|DEFAULT_ADMIN_USERNAME\|create_default_admin" setup_db.py
+
+# 7. Confirm Git status and staged model files
+git status --short
+
+# 8. Force-add ML model files if needed
+git add -f models/fraud_detector_v2.pkl models/vectorizer_v2.pkl
+
+echo "Final checks complete. If all commands succeed, proceed with git commit and push."

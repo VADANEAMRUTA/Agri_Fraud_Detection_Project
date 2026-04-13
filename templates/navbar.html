@@ -19,6 +19,12 @@
                 <i class="fas fa-user"></i>
                 Profile
             </a>
+            {% if session.role == 'admin' %}
+            <a href="/admin/dashboard" class="nav-link {% if request.endpoint == 'admin_dashboard' %}active{% endif %}">
+                <i class="fas fa-user-shield"></i>
+                Admin Panel
+            </a>
+            {% endif %}
             <div class="user-welcome">
                 <i class="fas fa-user-circle"></i>
                 <span>{{ session.get('user') }}</span>

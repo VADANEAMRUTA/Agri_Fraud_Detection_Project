@@ -633,3 +633,43 @@ body {
         opacity: 0;
     }
 }
+
+.role-options {
+    display: flex;
+    gap: 20px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+}
+
+.role-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border: 2px solid #e0e0e0;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.3s;
+    flex: 1;
+    justify-content: center;
+}
+
+.role-option:hover {
+    border-color: #2e7d32;
+    background: #f0f7f0;
+}
+
+.role-option input {
+    margin: 0;
+    width: auto;
+}
+
+.role-option i {
+    font-size: 18px;
+    color: #2e7d32;
+}
+
+.role-option.selected {
+    border-color: #2e7d32;
+    background: #e8f5e9;
+}
