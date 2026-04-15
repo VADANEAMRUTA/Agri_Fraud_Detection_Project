@@ -1,5 +1,6 @@
 from dotenv import load_dotenv
 import os
+import shutil
 load_dotenv()
 
 # Debug: Check environment variables
@@ -39,10 +40,54 @@ from content_validator import ContentValidator
 # Import the database instance
 from database import db_instance
 
-if os.name == "nt":
-    default_tesseract_path = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-    if os.path.exists(default_tesseract_path):
-        pytesseract.pytesseract.tesseract_cmd = default_tesseract_path
+# ---------------- TESSERACT AUTO-DETECTION ----------------
+def find_tesseract_executable():
+    """Auto-detect Tesseract executable path for any OS"""
+    try:
+        # First, try to find tesseract in PATH
+        tesseract_cmd = shutil.which('tesseract')
+        if tesseract_cmd:
+            print(f"✅ Tesseract found in PATH: {tesseract_cmd}")
+            return tesseract_cmd
+        
+        # Common installation paths for different OS
+        common_paths = [
+            # Windows paths
+            r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+            r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+            r"C:\Users\%USERNAME%\AppData\Local\Programs\Tesseract-OCR\tesseract.exe",
+            # Linux paths
+            "/usr/bin/tesseract",
+            "/usr/local/bin/tesseract",
+            "/opt/tesseract/bin/tesseract",
+            # macOS paths
+            "/usr/local/bin/tesseract",
+            "/opt/homebrew/bin/tesseract",
+        ]
+        
+        for path in common_paths:
+            # Expand environment variables in Windows paths
+            expanded_path = os.path.expandvars(path)
+            if os.path.exists(expanded_path):
+                print(f"✅ Tesseract found at: {expanded_path}")
+                return expanded_path
+        
+        print("❌ Tesseract executable not found in common locations")
+        return None
+        
+    except Exception as e:
+        print(f"❌ Error detecting Tesseract: {e}")
+        return None
+
+# Set Tesseract path
+TESSERACT_PATH = find_tesseract_executable()
+if TESSERACT_PATH:
+    pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
+    print(f"🔧 Tesseract configured: {TESSERACT_PATH}")
+else:
+    print("⚠️ Tesseract not found - OCR features will not work")
+    print("   On Linux: sudo apt-get install tesseract-ocr tesseract-ocr-hin tesseract-ocr-ben")
+    print("   On Windows: Download from https://github.com/UB-Mannheim/tesseract/wiki")
 
 
 # Import ML model - handle import errors gracefully
@@ -867,9 +912,9 @@ def is_agriculture_content(text):
 def extract_text_from_image(image_path):
     """Extract text from image with improved OCR settings"""
     try:
-        # Add language parameter for Hindi/English text
-        pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'  # Windows
-        # For Linux: remove above line or adjust path
+        # Check if Tesseract is available
+        if not TESSERACT_PATH:
+            return "ERROR: Tesseract OCR not installed on this server. Please contact administrator."
         
         # Try multiple languages and configurations
         configs = [
@@ -917,21 +962,11 @@ def extract_text_from_image(image_path):
     WORKING OCR FUNCTION - Properly extracts text from fertilizer images
     """
     try:
-        # 1. FIRST - Set correct Tesseract path for Windows
-        if os.name == 'nt':  # Windows
-            tesseract_paths = [
-                r"C:\Program Files\Tesseract-OCR\tesseract.exe",
-                r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
-            ]
-            for path in tesseract_paths:
-                if os.path.exists(path):
-                    pytesseract.pytesseract.tesseract_cmd = path
-                    print(f"Using Tesseract at: {path}")
-                    break
-            else:
-                return "ERROR: Tesseract not installed. Download from: https://github.com/UB-Mannheim/tesseract/wiki"
+        # Check if Tesseract is available
+        if not TESSERACT_PATH:
+            return "ERROR: Tesseract OCR not installed on this server. Please contact administrator."
         
-        # 2. Open image
+        # Open image
         img = Image.open(image_path)
         
         # 3. PREPROCESSING - CRITICAL FOR GOOD OCR
@@ -1168,10 +1203,9 @@ def is_valid_text(text):
 def extract_text_from_image(image_file, selected_language="eng"):
     """Extract text from uploaded image using balanced OCR speed and accuracy."""
     try:
-        if os.name == "nt" and not os.path.exists(getattr(pytesseract.pytesseract, "tesseract_cmd", "")):
-            fallback_path = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-            if os.path.exists(fallback_path):
-                pytesseract.pytesseract.tesseract_cmd = fallback_path
+        # Check if Tesseract is available
+        if not TESSERACT_PATH:
+            return "ERROR: Tesseract OCR not installed on this server. Please contact administrator."
 
         processed_images = preprocess_image_for_ocr(image_file)
         ocr_language = normalize_ocr_language(selected_language)
