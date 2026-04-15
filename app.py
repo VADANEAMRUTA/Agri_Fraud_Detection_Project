@@ -7,6 +7,7 @@ print("=" * 50)
 print("ENVIRONMENT VARIABLES CHECK:")
 print(f"ADMIN_SECRET_KEY: '{os.getenv('ADMIN_SECRET_KEY')}'")
 print(f"ADMIN_REGISTRATION_KEY: '{os.getenv('ADMIN_REGISTRATION_KEY')}'")
+print("DB HOST:", os.getenv("DB_HOST"))
 print("=" * 50)
 
 import sqlite3
@@ -93,11 +94,11 @@ def login_required(f):
 # ---------------- MYSQL HELPER ----------------
 def get_mysql_connection():
     return mysql.connector.connect(
-        host=os.getenv("MYSQL_HOST", "127.0.0.1"),
-        port=int(os.getenv("MYSQL_PORT", 3306)),
-        user=os.getenv("MYSQL_USER", "root"),
-        password=os.getenv("MYSQL_PASSWORD", "root"),
-        database=os.getenv("MYSQL_DB_USERS", "social_media_fraud_users")
+        host=os.getenv("DB_HOST"),
+        port=int(os.getenv("DB_PORT")),
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASSWORD"),
+        database=os.getenv("DB_NAME")
     )
 
 # ---------------- ADMIN REQUIRED DECORATOR ----------------
@@ -351,13 +352,7 @@ def create_admin_user():
     """Create admin user if not exists - using MySQL"""
     try:
         # Connect to MySQL database
-        conn = mysql.connector.connect(
-            host=os.getenv("MYSQL_HOST", "127.0.0.1"),
-            port=int(os.getenv("MYSQL_PORT", 3306)),
-            user=os.getenv("MYSQL_USER", "root"),
-            password=os.getenv("MYSQL_PASSWORD", "root"),
-            database=os.getenv("MYSQL_DB_USERS", "social_media_fraud_users")
-        )
+        conn = get_mysql_connection()
         cursor = conn.cursor()
 
         # Check if admin exists
@@ -2060,13 +2055,7 @@ def admin_login():
 
         try:
             # Connect to MySQL database
-            conn = mysql.connector.connect(
-                host=os.getenv("MYSQL_HOST", "127.0.0.1"),
-                port=int(os.getenv("MYSQL_PORT", 3306)),
-                user=os.getenv("MYSQL_USER", "root"),
-                password=os.getenv("MYSQL_PASSWORD", "root"),
-                database=os.getenv("MYSQL_DB_USERS", "social_media_fraud_users")
-            )
+            conn = get_mysql_connection()
             cursor = conn.cursor(dictionary=True)
 
             # Check if user exists and is admin
@@ -2101,16 +2090,11 @@ def admin_login():
                     return render_template("admin_login.html")
             else:
                 # Check if user exists but not admin
-                conn = mysql.connector.connect(
-                    host=os.getenv("MYSQL_HOST", "127.0.0.1"),
-                    port=int(os.getenv("MYSQL_PORT", 3306)),
-                    user=os.getenv("MYSQL_USER", "root"),
-                    password=os.getenv("MYSQL_PASSWORD", "root"),
-                    database=os.getenv("MYSQL_DB_USERS", "social_media_fraud_users")
-                )
+                conn = get_mysql_connection()
                 cursor = conn.cursor(dictionary=True)
                 cursor.execute("SELECT username FROM users WHERE username = %s", (username,))
                 regular_user = cursor.fetchone()
+                cursor.close()
                 conn.close()
 
                 if regular_user:
@@ -2131,16 +2115,11 @@ def admin_login():
 def check_admins():
     """Debug route to check all admin users"""
     try:
-        conn = mysql.connector.connect(
-            host=os.getenv("MYSQL_HOST", "127.0.0.1"),
-            port=int(os.getenv("MYSQL_PORT", 3306)),
-            user=os.getenv("MYSQL_USER", "root"),
-            password=os.getenv("MYSQL_PASSWORD", "root"),
-            database=os.getenv("MYSQL_DB_USERS", "social_media_fraud_users")
-        )
+        conn = get_mysql_connection()
         cursor = conn.cursor(dictionary=True)
         cursor.execute("SELECT id, username, email, role FROM users WHERE role = 'admin'")
         admins = cursor.fetchall()
+        cursor.close()
         conn.close()
 
         if not admins:
@@ -5611,4 +5590,6 @@ if __name__ == "__main__":
         print("1. Delete users.db and agriguard.db files")
         print("2. Restart the application")
         print("3. Check file permissions")
-        input("\nPress Enter to exit...")
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
