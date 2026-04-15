@@ -3,7 +3,7 @@ services:
     name: agri-fraud-detection
     env: python
     buildCommand: |
-      apt-get update && apt-get install -y tesseract-ocr tesseract-ocr-hin tesseract-ocr-ben tesseract-ocr-eng libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 libxrender-dev libgomp1 && 
+      apt-get update && apt-get install -y tesseract-ocr tesseract-ocr-eng tesseract-ocr-hin tesseract-ocr-ben tesseract-ocr-mar libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 libxrender-dev libgomp1 && 
       pip install --upgrade pip setuptools wheel && 
       pip install -r requirements.txt
     startCommand: gunicorn app:app

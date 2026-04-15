@@ -7,8 +7,10 @@ WORKDIR /app
 # Install system dependencies required for your app
 RUN apt-get update && apt-get install -y \
     tesseract-ocr \
+    tesseract-ocr-eng \
     tesseract-ocr-hin \
     tesseract-ocr-ben \
+    tesseract-ocr-mar \
     libgl1-mesa-glx \
     libglib2.0-0 \
     libsm6 \
@@ -18,6 +20,10 @@ RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
     && rm -rf /var/lib/apt/lists/*
+
+# Verify Tesseract installation
+RUN tesseract --version && \
+    tesseract --list-langs
 
 # Copy requirements file first (for better caching)
 COPY requirements.txt .

@@ -2359,6 +2359,131 @@ def check_session():
     """
     return html
 
+# ---------------- OCR DIAGNOSTIC ROUTE ----------------
+@app.route('/check-ocr')
+def check_ocr():
+    """Diagnostic route to check Tesseract OCR installation and functionality"""
+    import subprocess
+    
+    results = {
+        'tesseract_path': TESSERACT_PATH,
+        'tesseract_found': TESSERACT_PATH is not None,
+        'version': None,
+        'languages': [],
+        'test_ocr': None,
+        'errors': []
+    }
+    
+    # Check Tesseract version
+    try:
+        if TESSERACT_PATH:
+            result = subprocess.run([TESSERACT_PATH, '--version'], 
+                                  capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                results['version'] = result.stdout.strip().split('\n')[0]
+            else:
+                results['errors'].append(f"Version check failed: {result.stderr}")
+        else:
+            results['errors'].append("Tesseract executable not found")
+    except Exception as e:
+        results['errors'].append(f"Version check error: {str(e)}")
+    
+    # Check available languages
+    try:
+        if TESSERACT_PATH:
+            result = subprocess.run([TESSERACT_PATH, '--list-langs'], 
+                                  capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                langs = result.stdout.strip().split('\n')[1:]  # Skip header
+                results['languages'] = [lang.strip() for lang in langs if lang.strip()]
+            else:
+                results['errors'].append(f"Language check failed: {result.stderr}")
+    except Exception as e:
+        results['errors'].append(f"Language check error: {str(e)}")
+    
+    # Test OCR functionality
+    try:
+        if TESSERACT_PATH:
+            # Create a simple test image in memory
+            from PIL import Image, ImageDraw
+            img = Image.new('RGB', (200, 50), color='white')
+            draw = ImageDraw.Draw(img)
+            draw.text((10, 10), "TEST OCR", fill='black')
+            
+            # Save to temporary file
+            import tempfile
+            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+                img.save(tmp.name)
+                tmp_path = tmp.name
+            
+            # Try OCR
+            import pytesseract
+            text = pytesseract.image_to_string(img, config='--psm 6')
+            results['test_ocr'] = text.strip() if text.strip() else "No text extracted"
+            
+            # Clean up
+            import os
+            os.unlink(tmp_path)
+        else:
+            results['test_ocr'] = "Cannot test - Tesseract not found"
+    except Exception as e:
+        results['errors'].append(f"OCR test error: {str(e)}")
+        results['test_ocr'] = f"Test failed: {str(e)}"
+    
+    # Generate HTML response
+    status_color = "green" if results['tesseract_found'] and not results['errors'] else "red"
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>OCR Diagnostic - AgriGuard</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 20px; }}
+            .status {{ color: {status_color}; font-weight: bold; }}
+            .error {{ color: red; }}
+            .success {{ color: green; }}
+            pre {{ background: #f5f5f5; padding: 10px; border-radius: 5px; }}
+        </style>
+    </head>
+    <body>
+        <h1>🔍 Tesseract OCR Diagnostic</h1>
+        
+        <h2>Installation Status: <span class="status">
+            {"✅ WORKING" if results['tesseract_found'] and not results['errors'] else "❌ ISSUES DETECTED"}
+        </span></h2>
+        
+        <div style="background: #f9f9f9; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <h3>📍 Tesseract Path</h3>
+            <p><strong>Detected Path:</strong> {results['tesseract_path'] or 'Not found'}</p>
+            
+            <h3>📋 Version</h3>
+            <p><strong>Version:</strong> {results['version'] or 'Unknown'}</p>
+            
+            <h3>🌐 Available Languages</h3>
+            <p><strong>Languages:</strong> {', '.join(results['languages']) if results['languages'] else 'None detected'}</p>
+            
+            <h3>🧪 OCR Test</h3>
+            <p><strong>Test Result:</strong> {results['test_ocr'] or 'Not tested'}</p>
+        </div>
+        
+        {"<div class='error'><h3>❌ Errors</h3><ul>" + "".join(f"<li>{error}</li>" for error in results['errors']) + "</ul></div>" if results['errors'] else ""}
+        
+        <h3>🔧 Troubleshooting</h3>
+        <ul>
+            <li><strong>On Linux (Render/Ubuntu):</strong> Install with <code>sudo apt-get install tesseract-ocr tesseract-ocr-eng tesseract-ocr-hin tesseract-ocr-ben</code></li>
+            <li><strong>On Windows:</strong> Download from <a href="https://github.com/UB-Mannheim/tesseract/wiki" target="_blank">GitHub</a></li>
+            <li><strong>Check PATH:</strong> Ensure tesseract is in your system PATH</li>
+            <li><strong>Language Packs:</strong> Install language packs for Hindi/Bengali text recognition</li>
+        </ul>
+        
+        <p><a href="/detect">← Back to Fraud Detection</a> | <a href="/dashboard">Dashboard</a></p>
+    </body>
+    </html>
+    """
+    
+    return html
+
 # ---------------- FORGOT PASSWORD ROUTES ----------------
 @app.route("/forgot-password", methods=["GET", "POST"])
 def forgot_password():
