@@ -19,3 +19,5 @@ requests==2.31.0
 beautifulsoup4==4.12.2
 
 gunicorn==21.2.0
+setuptools==68.0.0
+wheel
