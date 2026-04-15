@@ -1,10 +1,10 @@
-﻿<!DOCTYPE html>
-<html lang="en">
+<!DOCTYPE html>
+<html lang='en'>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes'>
     <title>AgriGuard Admin Dashboard</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css'>
     <style>
         * {
             margin: 0;
@@ -39,8 +39,13 @@
             left: 0;
             bottom: 0;
             overflow-y: auto;
-            transition: width 0.25s ease;
+            transition: transform 0.3s ease, width 0.25s ease;
             z-index: 1000;
+            transform: translateX(0);
+        }
+
+        .sidebar.collapsed {
+            transform: translateX(-100%);
         }
 
         .sidebar-header {
@@ -83,6 +88,7 @@
             cursor: pointer;
             transition: background 0.25s ease, transform 0.2s ease;
             text-align: left;
+            min-height: 44px;
         }
 
         .sidebar-menu button:hover,
@@ -104,13 +110,32 @@
             background: rgba(255, 255, 255, 0.12);
             border-radius: 12px;
             color: #ffffff;
+            min-height: 44px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
         }
 
         .main-content {
             margin-left: 260px;
             flex: 1;
-            transition: margin-left 0.25s ease;
+            transition: margin-left 0.3s ease;
             min-height: 100vh;
+        }
+
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+        }
+
+        .sidebar-overlay.active {
+            display: block;
         }
 
         .topbar {
@@ -123,6 +148,23 @@
             position: sticky;
             top: 0;
             z-index: 900;
+        }
+
+        .hamburger-btn {
+            display: none !important;
+            background: none;
+            border: none;
+            color: #1a472a;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 10px;
+            border-radius: 6px;
+            min-height: 44px;
+            min-width: 44px;
+        }
+
+        .hamburger-btn:hover {
+            background: rgba(26, 71, 42, 0.1);
         }
 
         .topbar-title {
@@ -234,6 +276,27 @@
             box-shadow: 0 10px 35px rgba(26, 71, 42, 0.08);
             overflow-x: auto;
             padding: 22px;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: thin;
+            scrollbar-color: #2e7d32 #f0f0f0;
+        }
+
+        .table-card::-webkit-scrollbar {
+            height: 8px;
+        }
+
+        .table-card::-webkit-scrollbar-track {
+            background: #f0f0f0;
+            border-radius: 4px;
+        }
+
+        .table-card::-webkit-scrollbar-thumb {
+            background: #2e7d32;
+            border-radius: 4px;
+        }
+
+        .table-card::-webkit-scrollbar-thumb:hover {
+            background: #1a472a;
         }
 
         table {
@@ -288,10 +351,14 @@
         .button-danger {
             border: none;
             border-radius: 999px;
-            padding: 10px 18px;
+            padding: 12px 20px;
             font-size: 0.93rem;
             cursor: pointer;
             transition: transform 0.2s ease, opacity 0.2s ease;
+            min-height: 44px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .button-secondary:hover,
@@ -401,11 +468,15 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
+        /* Mobile Responsive Styles */
         @media (max-width: 1024px) {
+            .hamburger-btn {
+                display: none !important;
+            }
+
             .sidebar {
-                position: relative;
-                width: 100%;
-                height: auto;
+                position: fixed;
+                width: 280px;
             }
 
             .main-content {
@@ -426,119 +497,478 @@
             .profile-grid {
                 grid-template-columns: 1fr;
             }
+
+            .stats-grid {
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 16px;
+            }
         }
 
-        @media (max-width: 720px) {
+        @media (max-width: 768px) {
+            .hamburger-btn {
+                display: block !important;
+            }
+
             .sidebar {
-                padding: 16px 12px;
+                transform: translateX(-100%);
+                width: 300px;
+                z-index: 1001;
+            }
+
+            .sidebar.mobile-open {
+                transform: translateX(0);
+            }
+
+            .sidebar-overlay.active {
+                display: block;
+            }
+
+            .main-content {
+                margin-left: 0;
+            }
+
+            .topbar {
+                padding: 16px 20px;
+                position: relative;
+                box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            }
+
+            .topbar-title {
+                font-size: 1.2rem;
+                text-align: center;
+                font-weight: 600;
+            }
+
+            .content {
+                padding: 20px 16px 30px;
+            }
+
+            .section-header h2 {
+                font-size: 1.5rem;
+                margin-bottom: 8px;
+            }
+
+            .section-header p {
+                max-width: 100%;
+                font-size: 0.9rem;
+                line-height: 1.5;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+                gap: 16px;
+                margin-bottom: 24px;
+            }
+
+            .card {
+                padding: 20px;
+                min-height: 120px;
+                border-radius: 16px;
+                box-shadow: 0 4px 20px rgba(26, 71, 42, 0.08);
+            }
+
+            .card-small {
+                font-size: 0.9rem;
+                margin-bottom: 12px;
+            }
+
+            .card-large {
+                font-size: 2rem;
+                font-weight: 700;
+            }
+
+            .card-label {
+                margin-top: 12px;
+            }
+
+            .table-card {
+                padding: 16px;
+                border-radius: 16px;
+                box-shadow: 0 4px 20px rgba(26, 71, 42, 0.08);
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            table {
+                font-size: 0.85rem;
+                min-width: 600px;
+                border-collapse: collapse;
+            }
+
+            table thead th,
+            table tbody td {
+                padding: 12px 8px;
+                white-space: nowrap;
+            }
+
+            table thead th {
+                position: sticky;
+                top: 0;
+                background: #ffffff;
+                z-index: 10;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            }
+
+            .button-secondary,
+            .button-danger {
+                padding: 12px 16px;
+                font-size: 0.9rem;
+                min-height: 44px;
+                border-radius: 8px;
+                font-weight: 600;
+                transition: all 0.2s ease;
+            }
+
+            .button-secondary:active,
+            .button-danger:active {
+                transform: scale(0.98);
+            }
+
+            .report-summary {
+                grid-template-columns: 1fr;
+                gap: 16px;
+            }
+
+            .report-card {
+                padding: 18px;
+                border-radius: 16px;
+                box-shadow: 0 4px 20px rgba(26, 71, 42, 0.08);
+            }
+
+            .report-card h3 {
+                font-size: 1rem;
+                margin-bottom: 8px;
+            }
+
+            .report-card p {
+                font-size: 1.8rem;
+                font-weight: 700;
+            }
+
+            .profile-grid {
+                grid-template-columns: 1fr;
+                gap: 16px;
+            }
+
+            .profile-card {
+                border-radius: 16px;
+                box-shadow: 0 4px 20px rgba(26, 71, 42, 0.08);
+            }
+
+            .sidebar-menu button,
+            .logout-link {
+                font-size: 1rem;
+                padding: 16px;
+                min-height: 48px;
+                border-radius: 12px;
+                transition: all 0.2s ease;
+            }
+
+            .sidebar-menu button:active,
+            .logout-link:active {
+                transform: scale(0.98);
+            }
+
+            .sidebar-header h1 {
+                font-size: 1.5rem;
+            }
+
+            .sidebar-header p {
+                font-size: 0.9rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .topbar {
+                padding: 12px 16px;
+            }
+
+            .hamburger-btn {
+                position: absolute;
+                left: 16px;
+                top: 50%;
+                transform: translateY(-50%);
+            }
+
+            .topbar-title {
+                margin-left: 60px;
+                margin-right: 60px;
+            }
+
+            .topbar-actions {
+                position: absolute;
+                right: 16px;
+                top: 50%;
+                transform: translateY(-50%);
+            }
+
+            .content {
+                padding: 16px 12px 24px;
+            }
+
+            .section-header {
+                margin-bottom: 20px;
+            }
+
+            .section-header h2 {
+                font-size: 1.3rem;
+            }
+
+            .section-header p {
+                font-size: 0.85rem;
+            }
+
+            .stats-grid {
+                gap: 12px;
+            }
+
+            .card {
+                padding: 16px;
+                border-radius: 12px;
+                min-height: 100px;
+            }
+
+            .card-small {
+                font-size: 0.85rem;
+                margin-bottom: 8px;
+            }
+
+            .card-large {
+                font-size: 1.8rem;
+            }
+
+            .card-label {
+                margin-top: 8px;
+                font-size: 0.85rem;
+            }
+
+            .table-card {
+                padding: 12px;
+                border-radius: 12px;
+                margin: 0 -12px;
+                width: calc(100% + 24px);
+            }
+
+            table {
+                font-size: 0.8rem;
+                min-width: 500px;
+            }
+
+            table thead th,
+            table tbody td {
+                padding: 10px 6px;
+            }
+
+            .badge {
+                font-size: 0.75rem;
+                padding: 6px 10px;
+                border-radius: 12px;
+            }
+
+            .button-secondary,
+            .button-danger {
+                padding: 10px 14px;
+                font-size: 0.85rem;
+                min-height: 44px;
+                border-radius: 6px;
+            }
+
+            .report-summary {
+                gap: 12px;
+            }
+
+            .report-card {
+                padding: 16px;
+                border-radius: 12px;
+            }
+
+            .report-card h3 {
+                font-size: 0.9rem;
+            }
+
+            .report-card p {
+                font-size: 1.5rem;
+            }
+
+            .profile-card {
+                padding: 20px;
+                border-radius: 12px;
+            }
+
+            .profile-field {
+                margin-bottom: 12px;
+            }
+
+            .profile-field label {
+                font-size: 0.9rem;
+                margin-bottom: 6px;
+            }
+
+            .profile-field span {
+                font-size: 0.95rem;
+            }
+
+            .profile-avatar {
+                width: 80px;
+                height: 80px;
+                font-size: 2rem;
+            }
+
+            .sidebar {
+                width: 100%;
+                padding: 20px 16px;
+                max-height: 100vh;
+                overflow-y: auto;
+            }
+
+            .sidebar-menu button,
+            .logout-link {
+                padding: 14px 16px;
+                font-size: 0.95rem;
+                min-height: 48px;
+                border-radius: 8px;
             }
 
             .sidebar-header h1 {
                 font-size: 1.4rem;
             }
 
-            .sidebar-menu button {
-                padding: 12px 12px;
+            .sidebar-header p {
+                font-size: 0.85rem;
+            }
+        }
+
+        /* Extra small screens */
+        @media (max-width: 360px) {
+            .content {
+                padding: 12px 8px 20px;
             }
 
-            .topbar,
-            .content {
-                padding: 18px 16px;
+            .section-header h2 {
+                font-size: 1.2rem;
+            }
+
+            .card {
+                padding: 12px;
+            }
+
+            .card-large {
+                font-size: 1.6rem;
+            }
+
+            .table-card {
+                margin: 0 -8px;
+                width: calc(100% + 16px);
+                padding: 8px;
             }
 
             table {
-                min-width: 100%;
+                font-size: 0.75rem;
+                min-width: 450px;
             }
 
-            .stats-grid,
-            .report-summary {
-                grid-template-columns: 1fr;
+            .button-secondary,
+            .button-danger {
+                padding: 8px 12px;
+                font-size: 0.8rem;
+                min-height: 40px;
+            }
+
+            .topbar-title {
+                font-size: 1rem;
+                margin-left: 50px;
+                margin-right: 50px;
             }
         }
     </style>
 </head>
 <body>
-    <div class="container-fluid">
-        <aside class="sidebar">
-            <div class="sidebar-header">
+    <div class='container-fluid'>
+        <aside class='sidebar' id='sidebar'>
+            <div class='sidebar-header'>
                 <h1>AgriGuard</h1>
                 <p>Admin Dashboard</p>
             </div>
             <nav>
-                <ul class="sidebar-menu">
-                    <li><button id="menu-dashboard" class="active" type="button" onclick="showSection('dashboard')"><i class="fas fa-chart-pie"></i><span>Dashboard</span></button></li>
-                    <li><button id="menu-users" type="button" onclick="showSection('users')"><i class="fas fa-users"></i><span>User Management</span></button></li>
-                    <li><button id="menu-fraud" type="button" onclick="showSection('fraud-checks')"><i class="fas fa-shield-alt"></i><span>Fraud Checks</span></button></li>
-                    <li><button id="menu-reports" type="button" onclick="showSection('reports')"><i class="fas fa-file-alt"></i><span>Reports</span></button></li>
-                    <li><button id="menu-profile" type="button" onclick="showSection('profile')"><i class="fas fa-user-circle"></i><span>Profile</span></button></li>
+                <ul class='sidebar-menu'>
+                    <li><button id='menu-dashboard' class='active' type='button' onclick='showSection("dashboard")'><i class='fas fa-chart-pie'></i><span>Dashboard</span></button></li>
+                    <li><button id='menu-users' type='button' onclick='showSection("users")'><i class='fas fa-users'></i><span>User Management</span></button></li>
+                    <li><button id='menu-fraud' type='button' onclick='showSection("fraud-checks")'><i class='fas fa-shield-alt'></i><span>Fraud Checks</span></button></li>
+                    <li><button id='menu-reports' type='button' onclick='showSection("reports")'><i class='fas fa-file-alt'></i><span>Reports</span></button></li>
+                    <li><button id='menu-profile' type='button' onclick='showSection("profile")'><i class='fas fa-user-circle'></i><span>Profile</span></button></li>
                 </ul>
-                <a class="logout-link" href="{{ url_for('admin_logout') }}"><i class="fas fa-sign-out-alt"></i> Logout</a>
+                <a class='logout-link' href='{{ url_for("admin_logout") }}'><i class='fas fa-sign-out-alt'></i> Logout</a>
             </nav>
         </aside>
 
-        <main class="main-content">
-            <header class="topbar">
-                <div class="topbar-title">Admin Control Panel</div>
-                <div class="topbar-actions">
-                    <div class="profile-badge"><i class="fas fa-user-shield"></i> {{ session.get('username', 'Admin') }}</div>
+        <div class='sidebar-overlay' id='sidebarOverlay' onclick='toggleSidebar()'></div>
+
+        <main class='main-content'>
+            <header class='topbar'>
+                <button class='hamburger-btn' onclick='toggleSidebar()' aria-label='Toggle menu'>
+                    <i class='fas fa-bars'></i>
+                </button>
+                <div class='topbar-title'>Admin Control Panel</div>
+                <div class='topbar-actions'>
+                    <div class='profile-badge'><i class='fas fa-user-shield'></i> {{ session.get("username", "Admin") }}</div>
                 </div>
             </header>
 
-            <section class="content">
-                <div id="dashboard" class="section active">
-                    <div class="section-header">
+            <section class='content'>
+                <div id='dashboard' class='section active'>
+                    <div class='section-header'>
                         <div>
                             <h2>Dashboard Overview</h2>
                             <p>Monitor users and fraud detection activity in real time. Use the navigation menu to manage users, review fraud checks, and export reports.</p>
                         </div>
                     </div>
 
-                    <div class="stats-grid">
-                        <div class="card">
-                            <div class="card-small">Total Users</div>
-                            <div class="card-large">{{ stats.total_users }}</div>
-                            <div class="card-label"><span class="green-pill">All registered accounts</span></div>
+                    <div class='stats-grid'>
+                        <div class='card'>
+                            <div class='card-small'>Total Users</div>
+                            <div class='card-large'>{{ stats.total_users }}</div>
+                            <div class='card-label'><span class='green-pill'>All registered accounts</span></div>
                         </div>
-                        <div class="card">
-                            <div class="card-small">Admin Users</div>
-                            <div class="card-large">{{ stats.admin_users }}</div>
-                            <div class="card-label"><span class="green-pill">Admins with dashboard access</span></div>
+                        <div class='card'>
+                            <div class='card-small'>Admin Users</div>
+                            <div class='card-large'>{{ stats.admin_users }}</div>
+                            <div class='card-label'><span class='green-pill'>Admins with dashboard access</span></div>
                         </div>
-                        <div class="card">
-                            <div class="card-small">Farmer Users</div>
-                            <div class="card-large">{{ stats.farmer_users }}</div>
-                            <div class="card-label"><span class="green-pill">Farmer accounts</span></div>
+                        <div class='card'>
+                            <div class='card-small'>Farmer Users</div>
+                            <div class='card-large'>{{ stats.farmer_users }}</div>
+                            <div class='card-label'><span class='green-pill'>Farmer accounts</span></div>
                         </div>
-                        <div class="card">
-                            <div class="card-small">Total Fraud Checks</div>
-                            <div class="card-large">{{ stats.total_fraud_checks }}</div>
-                            <div class="card-label"><span class="green-pill">Fraud scan history</span></div>
+                        <div class='card'>
+                            <div class='card-small'>Total Fraud Checks</div>
+                            <div class='card-large'>{{ stats.total_fraud_checks }}</div>
+                            <div class='card-label'><span class='green-pill'>Fraud scan history</span></div>
                         </div>
                     </div>
 
-                    <div class="stats-grid">
-                        <div class="card">
-                            <div class="card-small">Fraud Rate</div>
-                            <div class="card-large">{{ stats.fraud_rate }}%</div>
-                            <div class="card-label"><span class="green-pill">Risk detection percentage</span></div>
+                    <div class='stats-grid'>
+                        <div class='card'>
+                            <div class='card-small'>Fraud Rate</div>
+                            <div class='card-large'>{{ stats.fraud_rate }}%</div>
+                            <div class='card-label'><span class='green-pill'>Risk detection percentage</span></div>
                         </div>
-                        <div class="card">
-                            <div class="card-small">Most Recent Check</div>
-                            <div class="card-large">{{ fraud_checks[0].created_at if fraud_checks else 'N/A' }}</div>
-                            <div class="card-label"><span class="green-pill">Latest fraud analysis</span></div>
+                        <div class='card'>
+                            <div class='card-small'>Most Recent Check</div>
+                            <div class='card-large'>{{ fraud_checks[0].created_at if fraud_checks else "N/A" }}</div>
+                            <div class='card-label'><span class='green-pill'>Latest fraud analysis</span></div>
                         </div>
                     </div>
                 </div>
 
-                <div id="users" class="section">
-                    <div class="section-header">
+                <div id='users' class='section'>
+                    <div class='section-header'>
                         <div>
                             <h2>User Management</h2>
                             <p>Review all registered users and remove inactive or suspicious accounts. Admin accounts cannot delete themselves from this panel.</p>
                         </div>
-                        <button class="button-secondary" type="button" onclick="showSection('dashboard')"><i class="fas fa-arrow-left"></i> Back to Dashboard</button>
+                        <button class='button-secondary' type='button' onclick='showSection("dashboard")'><i class='fas fa-arrow-left'></i> Back to Dashboard</button>
                     </div>
-                    <div class="table-card">
+                    <div class='table-card'>
                         <table>
                             <thead>
                                 <tr>
@@ -559,20 +989,20 @@
                                             <td>{{ user.username }}</td>
                                             <td>{{ user.email }}</td>
                                             <td>{{ user.mobile }}</td>
-                                            <td><span class="badge {{ 'badge-admin' if user.role.lower() == 'admin' else 'badge-farmer' }}">{{ user.role.title() }}</span></td>
+                                            <td><span class='badge {{ "badge-admin" if user.role.lower() == "admin" else "badge-farmer" }}'>{{ user.role.title() }}</span></td>
                                             <td>{{ user.created_at }}</td>
                                             <td>
-                                                {% if user.id != session.get('user_id') %}
-                                                    <button class="button-danger" type="button" onclick="deleteUser({{ user.id }}, '{{ user.username|e }}')"><i class="fas fa-trash-alt"></i> Delete</button>
+                                                {% if user.id != session.get("user_id") %}
+                                                    <button class='button-danger' type='button' onclick='deleteUser({{ user.id }}, "{{ user.username|e }}")'><i class='fas fa-trash-alt'></i> Delete</button>
                                                 {% else %}
-                                                    <span class="badge badge-admin">Current</span>
+                                                    <span class='badge badge-admin'>Current</span>
                                                 {% endif %}
                                             </td>
                                         </tr>
                                     {% endfor %}
                                 {% else %}
                                     <tr>
-                                        <td colspan="7" class="empty-state">No users found in the database.</td>
+                                        <td colspan='7' class='empty-state'>No users found in the database.</td>
                                     </tr>
                                 {% endif %}
                             </tbody>
@@ -580,15 +1010,15 @@
                     </div>
                 </div>
 
-                <div id="fraud-checks" class="section">
-                    <div class="section-header">
+                <div id='fraud-checks' class='section'>
+                    <div class='section-header'>
                         <div>
                             <h2>Fraud Checks</h2>
                             <p>View the recent fraud detection records, including score, user, and detected content for each scan.</p>
                         </div>
-                        <button class="button-secondary" type="button" onclick="showSection('dashboard')"><i class="fas fa-arrow-left"></i> Back to Dashboard</button>
+                        <button class='button-secondary' type='button' onclick='showSection("dashboard")'><i class='fas fa-arrow-left'></i> Back to Dashboard</button>
                     </div>
-                    <div class="table-card">
+                    <div class='table-card'>
                         <table>
                             <thead>
                                 <tr>
@@ -608,13 +1038,13 @@
                                             <td>{{ check.username }}</td>
                                             <td>{{ check.content }}</td>
                                             <td>{{ check.result }}</td>
-                                            <td>{{ '%.1f%%' | format(check.confidence if check.confidence is not none else 0) }}</td>
+                                            <td>{{ "%.1f%%" | format(check.confidence if check.confidence is not none else 0) }}</td>
                                             <td>{{ check.created_at }}</td>
                                         </tr>
                                     {% endfor %}
                                 {% else %}
                                     <tr>
-                                        <td colspan="6" class="empty-state">No fraud detection records are available.</td>
+                                        <td colspan='6' class='empty-state'>No fraud detection records are available.</td>
                                     </tr>
                                 {% endif %}
                             </tbody>
@@ -622,53 +1052,53 @@
                     </div>
                 </div>
 
-                <div id="reports" class="section">
-                    <div class="section-header">
+                <div id='reports' class='section'>
+                    <div class='section-header'>
                         <div>
                             <h2>Reports</h2>
                             <p>Download or review summary reports for user activity and fraud detection trends.</p>
                         </div>
-                        <button class="button-secondary" type="button" onclick="showSection('dashboard')"><i class="fas fa-arrow-left"></i> Back to Dashboard</button>
+                        <button class='button-secondary' type='button' onclick='showSection("dashboard")'><i class='fas fa-arrow-left'></i> Back to Dashboard</button>
                     </div>
-                    <div class="report-summary">
-                        <div class="report-card">
+                    <div class='report-summary'>
+                        <div class='report-card'>
                             <h3>Total Users</h3>
                             <p>{{ stats.total_users }}</p>
                         </div>
-                        <div class="report-card">
+                        <div class='report-card'>
                             <h3>Total Fraud Checks</h3>
                             <p>{{ stats.total_fraud_checks }}</p>
                         </div>
-                        <div class="report-card">
+                        <div class='report-card'>
                             <h3>Fraud Rate</h3>
                             <p>{{ stats.fraud_rate }}%</p>
                         </div>
                     </div>
-                    <div class="card">
+                    <div class='card'>
                         <p>Use the admin API routes to export custom reports as needed. This dashboard provides the latest user and fraud analytics in one place.</p>
                     </div>
                 </div>
 
-                <div id="profile" class="section">
-                    <div class="section-header">
+                <div id='profile' class='section'>
+                    <div class='section-header'>
                         <div>
                             <h2>Profile</h2>
                             <p>Review the current admin user and logout when you are done managing the platform.</p>
                         </div>
-                        <button class="button-secondary" type="button" onclick="showSection('dashboard')"><i class="fas fa-arrow-left"></i> Back to Dashboard</button>
+                        <button class='button-secondary' type='button' onclick='showSection("dashboard")'><i class='fas fa-arrow-left'></i> Back to Dashboard</button>
                     </div>
-                    <div class="profile-grid">
-                        <div class="profile-card">
-                            <div class="profile-avatar">{{ session.get('username', 'A')[0]|upper }}</div>
+                    <div class='profile-grid'>
+                        <div class='profile-card'>
+                            <div class='profile-avatar'>{{ session.get("username", "A")[0]|upper }}</div>
                             <h3>Account Summary</h3>
-                            <div class="profile-field"><label>Username</label><span>{{ session.get('username', 'Admin') }}</span></div>
-                            <div class="profile-field"><label>Role</label><span>{{ session.get('role', 'admin') | title }}</span></div>
-                            <div class="profile-field"><label>Current Page</label><span>Admin Dashboard</span></div>
+                            <div class='profile-field'><label>Username</label><span>{{ session.get("username", "Admin") }}</span></div>
+                            <div class='profile-field'><label>Role</label><span>{{ session.get("role", "admin") | title }}</span></div>
+                            <div class='profile-field'><label>Current Page</label><span>Admin Dashboard</span></div>
                         </div>
-                        <div class="profile-card">
+                        <div class='profile-card'>
                             <h3>Quick Actions</h3>
-                            <p class="empty-state">Use the left menu to manage users, review fraud checks, and export reports. Logout anytime with the button below.</p>
-                            <a class="button-secondary" style="display:inline-flex; align-items:center;" href="{{ url_for('admin_logout') }}"><i class="fas fa-sign-out-alt"></i>&nbsp;Sign Out</a>
+                            <p class='empty-state'>Use the left menu to manage users, review fraud checks, and export reports. Logout anytime with the button below.</p>
+                            <a class='button-secondary' style='display:inline-flex; align-items:center;' href='{{ url_for("admin_logout") }}'><i class='fas fa-sign-out-alt'></i>&nbsp;Sign Out</a>
                         </div>
                     </div>
                 </div>
@@ -691,6 +1121,28 @@
             var activeButton = document.getElementById('menu-' + sectionId.replace('-', ''));
             if (activeButton) {
                 activeButton.classList.add('active');
+            }
+            // Close sidebar on mobile after navigation
+            if (window.innerWidth <= 768) {
+                toggleSidebar();
+            }
+        }
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            const body = document.body;
+
+            sidebar.classList.toggle('mobile-open');
+            overlay.classList.toggle('active');
+
+            // Prevent body scroll when sidebar is open on mobile
+            if (window.innerWidth <= 768) {
+                if (sidebar.classList.contains('mobile-open')) {
+                    body.style.overflow = 'hidden';
+                } else {
+                    body.style.overflow = '';
+                }
             }
         }
 
@@ -721,8 +1173,59 @@
             });
         }
 
+        // Enhanced mobile interactions
         document.addEventListener('DOMContentLoaded', function() {
             showSection('dashboard');
+
+            // Handle window resize
+            window.addEventListener('resize', function() {
+                const sidebar = document.getElementById('sidebar');
+                const overlay = document.getElementById('sidebarOverlay');
+                const body = document.body;
+
+                if (window.innerWidth > 768) {
+                    sidebar.classList.remove('mobile-open');
+                    overlay.classList.remove('active');
+                    body.style.overflow = '';
+                }
+            });
+
+            // Close sidebar when pressing Escape key
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    const sidebar = document.getElementById('sidebar');
+                    const overlay = document.getElementById('sidebarOverlay');
+                    if (sidebar.classList.contains('mobile-open')) {
+                        toggleSidebar();
+                    }
+                }
+            });
+
+            // Add swipe gesture support for mobile
+            let touchStartX = 0;
+            let touchEndX = 0;
+
+            document.addEventListener('touchstart', function(e) {
+                touchStartX = e.changedTouches[0].screenX;
+            });
+
+            document.addEventListener('touchend', function(e) {
+                touchEndX = e.changedTouches[0].screenX;
+                handleSwipe();
+            });
+
+            function handleSwipe() {
+                const swipeThreshold = 50;
+                const sidebar = document.getElementById('sidebar');
+
+                if (touchEndX - touchStartX > swipeThreshold && !sidebar.classList.contains('mobile-open')) {
+                    // Swipe right to open sidebar
+                    toggleSidebar();
+                } else if (touchStartX - touchEndX > swipeThreshold && sidebar.classList.contains('mobile-open')) {
+                    // Swipe left to close sidebar
+                    toggleSidebar();
+                }
+            }
         });
     </script>
 </body>

@@ -4,8 +4,12 @@
         <i class="fas fa-shield-alt"></i>
         <span>AgriGuard</span>
     </a>
-    
-    <div class="nav-menu">
+
+    <button class="mobile-menu-toggle" onclick="toggleMobileMenu()" aria-label="Toggle menu">
+        <i class="fas fa-bars"></i>
+    </button>
+
+    <div class="nav-menu" id="navMenu">
         {% if session.get('user') %}
             <a href="/language" class="nav-link {% if request.endpoint == 'language' %}active{% endif %}">
                 <i class="fas fa-home"></i>
@@ -45,3 +49,10 @@
         {% endif %}
     </div>
 </nav>
+
+<script>
+function toggleMobileMenu() {
+    const navMenu = document.getElementById('navMenu');
+    navMenu.classList.toggle('active');
+}
+</script>

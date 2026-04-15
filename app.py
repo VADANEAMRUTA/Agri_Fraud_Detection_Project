@@ -11,7 +11,7 @@ print("=" * 50)
 
 import sqlite3
 import mysql.connector
-from flask import Flask, request, render_template, redirect, session, flash, jsonify, url_for, Response
+from flask import Flask, request, render_template, redirect, session, flash, jsonify, url_for, Response, make_response
 from PIL import Image, ImageEnhance, ImageFilter
 import pytesseract
 import cv2
@@ -1846,33 +1846,23 @@ def log_user_activity(user_id, action, details, activity_type):
         pass
 
 def get_user_full_profile(user_id):
-    """Get complete user profile information"""
     try:
-        conn = sqlite3.connect("users.db")
-        c = conn.cursor()
-        c.execute("SELECT * FROM users WHERE id = ?", (user_id,))
-        user = c.fetchone()
+        conn = get_mysql_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+        user = cursor.fetchone()
+
+        cursor.close()
         conn.close()
-        
-        if user:
-            return {
-                'id': user[0],
-                'username': user[1],
-                'email': user[2],
-                'mobile': user[3],
-                'fullname': user[4] if len(user) > 4 else user[1],
-                'location': user[5] if len(user) > 5 else 'Not set',
-                'profile_pic': user[6] if len(user) > 6 else None,
-                'language': user[7] if len(user) > 7 else 'en',
-                'email_notifications': user[8] if len(user) > 8 else True,
-                'account_type': user[9] if len(user) > 9 else 'standard',
-                'created_at': user[10] if len(user) > 10 else '2024-01-01',
-                'reset_token': user[12] if len(user) > 12 else None,
-                'reset_token_expiry': user[13] if len(user) > 13 else None
-            }
-    except:
-        pass
-    return None
+
+        print("Fetched user from DB:", user)   # DEBUG
+
+        return user   # already dictionary
+
+    except Exception as e:
+        print("Error fetching user:", e)
+        return None
 
 def create_translation_files():
     """Create comprehensive translation files if they don't exist"""
@@ -2559,10 +2549,11 @@ def instruction():
 def platform():
     return render_template("platform.html")
 
-# ---------------- PROFILE ----------------
-@app.route("/profile")
+# ---------------- FARMER DASHBOARD ----------------
+@app.route("/dashboard")
 @login_required
-def profile():
+def dashboard():
+    """Farmer dashboard page"""
     # Get complete user profile
     user = get_user_full_profile(session["user_id"])
     if not user:
@@ -2583,12 +2574,41 @@ def profile():
     # Get recent scans
     recent_scans = get_recent_scans(session["user_id"], limit=5)
     
-    return render_template("profile.html", 
+    return render_template("farmer_dashboard.html", 
                          user=user, 
                          stats=stats, 
                          recent_activity=recent_activity,
                          recent_scans=recent_scans)
 
+@app.route("/profile")
+@login_required
+def profile():
+    print("SESSION:", session)   # DEBUG
+    print("USER ID:", session.get("user_id"))
+
+    user = get_user_full_profile(session.get("user_id"))
+    print("USER DATA:", user)    # DEBUG
+
+    if not user:
+        return "User not found"  # TEMPORARY (instead of redirect)
+
+    stats = {
+        'total_scans': get_total_scans(session["user_id"]),
+        'fraud_detected': get_fraud_detected(session["user_id"]),
+        'genuine_ads': get_genuine_ads(session["user_id"]),
+        'accuracy_rate': get_accuracy_rate(session["user_id"])
+    }
+
+    recent_activity = get_recent_activity(session["user_id"], limit=5)
+    recent_scans = get_recent_scans(session["user_id"], limit=5)
+
+    return render_template(
+        "profile.html",
+        user=user,
+        stats=stats,
+        recent_activity=recent_activity,
+        recent_scans=recent_scans
+    )
 # ---------------- DETECT ROUTE ----------------
 @app.route("/detect", methods=["GET", "POST"])
 @login_required
@@ -3417,6 +3437,172 @@ def update_profile():
         
     except Exception as e:
         return jsonify({"success": False, "message": f"Error: {str(e)}"})
+
+# ---------------- CHANGE PASSWORD ----------------
+@app.route("/change_password", methods=["POST"])
+@login_required
+def change_password():
+    try:
+        data = request.get_json()
+        current_password = data.get('current_password', '')
+        new_password = data.get('new_password', '')
+        
+        if not current_password or not new_password:
+            return jsonify({"success": False, "message": "All fields are required"})
+        
+        if len(new_password) < 8:
+            return jsonify({"success": False, "message": "New password must be at least 8 characters long"})
+        
+        conn = sqlite3.connect("users.db")
+        c = conn.cursor()
+        
+        # Verify current password
+        c.execute("SELECT password FROM users WHERE id = ?", (session['user_id'],))
+        user = c.fetchone()
+        
+        if not user or not check_password_hash(user[0], current_password):
+            conn.close()
+            return jsonify({"success": False, "message": "Current password is incorrect"})
+        
+        # Hash new password
+        hashed_password = generate_password_hash(new_password)
+        
+        # Update password
+        c.execute("UPDATE users SET password = ? WHERE id = ?", (hashed_password, session['user_id']))
+        conn.commit()
+        conn.close()
+        
+        # Log activity
+        log_user_activity(session['user_id'], 'Password Changed', 'User changed their password', 'security')
+        
+        return jsonify({"success": True})
+        
+    except Exception as e:
+        return jsonify({"success": False, "message": f"Error: {str(e)}"})
+
+# ---------------- DELETE ACCOUNT ----------------
+@app.route("/delete_account", methods=["POST"])
+@login_required
+def delete_account():
+    try:
+        data = request.get_json()
+        confirmation = data.get('confirmation', '')
+        
+        if confirmation != 'DELETE':
+            return jsonify({"success": False, "message": "Invalid confirmation"})
+        
+        user_id = session['user_id']
+        
+        conn = sqlite3.connect("users.db")
+        c = conn.cursor()
+        
+        # Delete profile picture if exists
+        c.execute("SELECT profile_pic FROM users WHERE id = ?", (user_id,))
+        user = c.fetchone()
+        if user and user[0]:
+            try:
+                os.remove(os.path.join('static/uploads/profile_pics', user[0]))
+            except:
+                pass
+        
+        # Delete user from database
+        c.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        conn.commit()
+        conn.close()
+        
+        # Delete from agriguard database if exists
+        try:
+            db_instance.delete_user_data(user_id)
+        except:
+            pass
+        
+        # Log activity before deleting session
+        log_user_activity(user_id, 'Account Deleted', 'User deleted their account', 'security')
+        
+        # Clear session
+        session.clear()
+        
+        return jsonify({"success": True})
+        
+    except Exception as e:
+        return jsonify({"success": False, "message": f"Error: {str(e)}"})
+
+# ---------------- CLEAR HISTORY ----------------
+@app.route("/clear_history", methods=["POST"])
+@login_required
+def clear_history():
+    try:
+        data = request.get_json()
+        confirmation = data.get('confirmation', '')
+        
+        if confirmation != 'CLEAR':
+            return jsonify({"success": False, "message": "Invalid confirmation"})
+        
+        user_id = session['user_id']
+        
+        # Clear activity logs from agriguard database
+        try:
+            db_instance.clear_user_history(user_id)
+        except Exception as e:
+            print(f"Error clearing agriguard history: {e}")
+        
+        # Log the clearing action
+        log_user_activity(user_id, 'History Cleared', 'User cleared their scan history', 'data')
+        
+        return jsonify({"success": True})
+        
+    except Exception as e:
+        return jsonify({"success": False, "message": f"Error: {str(e)}"})
+
+# ---------------- EXPORT USER DATA ----------------
+@app.route("/export_user_data")
+@login_required
+def export_user_data():
+    try:
+        user_id = session['user_id']
+        
+        # Get user profile
+        user = get_user_full_profile(user_id)
+        
+        # Get user statistics
+        stats = {
+            'total_scans': get_total_scans(user_id),
+            'fraud_detected': get_fraud_detected(user_id),
+            'genuine_ads': get_genuine_ads(user_id),
+            'accuracy_rate': get_accuracy_rate(user_id)
+        }
+        
+        # Get recent activity
+        recent_activity = get_recent_activity(user_id, limit=100)
+        
+        # Get recent scans
+        recent_scans = get_recent_scans(user_id, limit=100)
+        
+        # Prepare export data
+        export_data = {
+            'user_profile': user,
+            'statistics': stats,
+            'recent_activity': recent_activity,
+            'recent_scans': recent_scans,
+            'export_date': datetime.now().isoformat(),
+            'export_version': '1.0'
+        }
+        
+        # Convert to JSON
+        json_data = json.dumps(export_data, indent=2, default=str)
+        
+        # Create response
+        response = make_response(json_data)
+        response.headers['Content-Type'] = 'application/json'
+        response.headers['Content-Disposition'] = f'attachment; filename=user_data_{user_id}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
+        
+        # Log activity
+        log_user_activity(user_id, 'Data Exported', 'User exported their data', 'data')
+        
+        return response
+        
+    except Exception as e:
+        return jsonify({"error": f"Export failed: {str(e)}"}), 500
 
 # ---------------- USER ACTIVITY ROUTE (FROM DATABASE.PY) ----------------
 @app.route("/user/activity/<int:user_id>")

@@ -122,6 +122,39 @@ class AgriGuardDB:
         except Error as e:
             print(f"Error adding contact message: {e}")
             return None
+    
+    def delete_user_data(self, user_id):
+        """Delete all user data from agriguard database"""
+        conn = self.create_connection()
+        if conn:
+            try:
+                cursor = conn.cursor()
+                # Delete user activity logs
+                cursor.execute("DELETE FROM user_activity_agri WHERE user_id = ?", (user_id,))
+                # Delete contact messages from this user
+                cursor.execute("DELETE FROM contact_messages WHERE email = (SELECT email FROM users WHERE id = ?)", (user_id,))
+                conn.commit()
+                conn.close()
+                return True
+            except Error as e:
+                print(f"Error deleting user data: {e}")
+                return False
+        return False
+    
+    def clear_user_history(self, user_id):
+        """Clear user's activity history"""
+        conn = self.create_connection()
+        if conn:
+            try:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM user_activity_agri WHERE user_id = ?", (user_id,))
+                conn.commit()
+                conn.close()
+                return True
+            except Error as e:
+                print(f"Error clearing user history: {e}")
+                return False
+        return False
 
 # Create a global instance
 db_instance = AgriGuardDB()

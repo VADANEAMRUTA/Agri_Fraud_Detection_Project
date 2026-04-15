@@ -4,12 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My Profile - AgriGuard</title>
-    <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Custom CSS -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <style>
         :root {
             --primary-color: #2e7d32;
@@ -18,6 +14,12 @@
             --light-bg: #f8f9fa;
             --dark-text: #333;
             --light-text: #666;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4edf5 100%);
+            min-height: 100vh;
         }
         
         .profile-container {
@@ -57,6 +59,7 @@
             box-shadow: 0 5px 15px rgba(0,0,0,0.2);
             background-color: #e0e0e0;
             position: relative;
+            z-index: 1;
         }
         
         .profile-pic {
@@ -73,6 +76,7 @@
             justify-content: center;
             font-size: 60px;
             color: var(--primary-color);
+            background: white;
         }
         
         .stats-card {
@@ -178,18 +182,6 @@
             margin-top: 5px;
         }
         
-        .badge-success {
-            background-color: var(--primary-color) !important;
-        }
-        
-        .badge-warning {
-            background-color: #ff9800 !important;
-        }
-        
-        .badge-danger {
-            background-color: #f44336 !important;
-        }
-        
         .file-upload {
             position: relative;
             overflow: hidden;
@@ -206,17 +198,14 @@
             height: 100%;
         }
         
-        /* Responsive adjustments */
         @media (max-width: 768px) {
             .profile-pic-container {
                 width: 120px;
                 height: 120px;
             }
-            
             .profile-header {
                 padding: 30px 15px;
             }
-            
             .stats-card {
                 margin-bottom: 20px;
             }
@@ -224,7 +213,6 @@
     </style>
 </head>
 <body>
-    <!-- Navigation Bar -->
     <nav class="navbar navbar-expand-lg navbar-dark" style="background-color: var(--primary-color);">
         <div class="container">
             <a class="navbar-brand" href="/">
@@ -235,36 +223,23 @@
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
-                    <li class="nav-item">
-                        <a class="nav-link" href="/"><i class="fas fa-home"></i> Home</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/detect"><i class="fas fa-search"></i> Detect Fraud</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link active" href="/profile"><i class="fas fa-user"></i> Profile</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/instruction"><i class="fas fa-info-circle"></i> Guide</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/about"><i class="fas fa-question-circle"></i> About</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/logout"><i class="fas fa-sign-out-alt"></i> Logout</a>
-                    </li>
+                    <li class="nav-item"><a class="nav-link" href="/"><i class="fas fa-home"></i> Home</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/detect"><i class="fas fa-search"></i> Detect Fraud</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="/profile"><i class="fas fa-user"></i> Profile</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/instruction"><i class="fas fa-info-circle"></i> Guide</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/about"><i class="fas fa-question-circle"></i> About</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/logout"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
                 </ul>
             </div>
         </div>
     </nav>
 
-    <!-- Profile Content -->
     <div class="profile-container">
-        <!-- Profile Header -->
+        <!-- Profile Header - FIXED: Uses session data -->
         <div class="profile-header text-center">
             <div class="profile-pic-container">
-                {% if user.profile_pic %}
-                <img src="{{ url_for('static', filename='uploads/profile_pics/' + user.profile_pic) }}" alt="Profile Picture" class="profile-pic" id="profileImage">
+                {% if user and user.profile_pic %}
+                <img src="{{ url_for('static', filename='uploads/profile_pics/' + user.profile_pic) }}" alt="Profile Picture" class="profile-pic">
                 {% else %}
                 <div class="profile-pic-placeholder">
                     <i class="fas fa-user"></i>
@@ -277,11 +252,13 @@
                     <input type="file" id="profilePicInput" accept="image/*" style="display: none;" onchange="uploadProfilePicture(this)">
                 </div>
             </div>
-            <!-- CHANGED: Fixed user display -->
-            <h1 class="display-5 fw-bold">{{ user.fullname or user.username }}</h1>
-            <p class="lead">{{ user.email }}</p>
+            <!-- FIXED: Display from session FIRST, then user object -->
+            <h1 class="display-5 fw-bold">{{ session.get('username') or session.get('user') or user.fullname or user.username or 'Farmer' }}</h1>
+            <p class="lead">{{ session.get('email') or user.email or 'Not provided' }}</p>
             <p class="mb-0">
-                <span class="badge bg-success">Member since: {{ user.created_at[:7] if user.created_at else '2025-01' }}</span>
+                <span class="badge bg-success">
+Member since: {{ user.created_at.strftime('%Y-%m') if user.created_at else '2025-01' }}
+</span>
             </p>
         </div>
 
@@ -289,83 +266,71 @@
         <div class="row mb-5">
             <div class="col-md-3 col-sm-6 mb-4">
                 <div class="stats-card text-center">
-                    <div class="stats-icon">
-                        <i class="fas fa-search"></i>
-                    </div>
-                    <div class="stats-number">{{ stats.total_scans }}</div>
+                    <div class="stats-icon"><i class="fas fa-search"></i></div>
+                    <div class="stats-number">{{ stats.total_scans if stats else 0 }}</div>
                     <div class="stats-label">Total Scans</div>
                 </div>
             </div>
             <div class="col-md-3 col-sm-6 mb-4">
                 <div class="stats-card text-center">
-                    <div class="stats-icon">
-                        <i class="fas fa-shield-alt"></i>
-                    </div>
-                    <div class="stats-number">{{ stats.fraud_detected }}</div>
+                    <div class="stats-icon"><i class="fas fa-shield-alt"></i></div>
+                    <div class="stats-number">{{ stats.fraud_detected if stats else 0 }}</div>
                     <div class="stats-label">Fraud Detected</div>
                 </div>
             </div>
             <div class="col-md-3 col-sm-6 mb-4">
                 <div class="stats-card text-center">
-                    <div class="stats-icon">
-                        <i class="fas fa-check-circle"></i>
-                    </div>
-                    <div class="stats-number">{{ stats.genuine_ads }}</div>
+                    <div class="stats-icon"><i class="fas fa-check-circle"></i></div>
+                    <div class="stats-number">{{ stats.genuine_ads if stats else 0 }}</div>
                     <div class="stats-label">Genuine Ads</div>
                 </div>
             </div>
             <div class="col-md-3 col-sm-6 mb-4">
                 <div class="stats-card text-center">
-                    <div class="stats-icon">
-                        <i class="fas fa-chart-line"></i>
-                    </div>
-                    <div class="stats-number">{{ stats.accuracy_rate }}%</div>
+                    <div class="stats-icon"><i class="fas fa-chart-line"></i></div>
+                    <div class="stats-number">{{ stats.accuracy_rate if stats else 0 }}%</div>
                     <div class="stats-label">Accuracy Rate</div>
                 </div>
             </div>
         </div>
 
         <div class="row">
-            <!-- Left Column: Personal Info -->
+            <!-- Personal Information - FIXED -->
             <div class="col-lg-6 mb-4">
                 <div class="info-card">
-                    <h3 class="section-title">
-                        <i class="fas fa-user-circle me-2"></i>Personal Information
-                    </h3>
+                    <h3 class="section-title"><i class="fas fa-user-circle me-2"></i>Personal Information</h3>
                     
-                    <!-- CHANGED: Updated Personal Information Section -->
                     <div class="info-item">
                         <div class="info-label">Full Name</div>
-                        <div class="info-value">{{ user.fullname or user.username }}</div>
+                        <div class="info-value">{{ session.get('username') or session.get('user') or user.fullname or user.username or 'Not set' }}</div>
+                    </div>
+
+                    <div class="info-item">
+                        <div class="info-label">Username</div>
+                        <div class="info-value">{{ session.get('username') or session.get('user') or user.username or 'Not set' }}</div>
                     </div>
 
                     <div class="info-item">
                         <div class="info-label">Email Address</div>
-                        <div class="info-value">{{ user.email }}</div>
+                        <div class="info-value">{{ session.get('email') or user.email or 'Not provided' }}</div>
                     </div>
 
                     <div class="info-item">
                         <div class="info-label">Phone Number</div>
-                        <div class="info-value">{{ user.mobile or 'Not set' }}</div>
+                        <div class="info-value">{{ session.get('mobile') or user.mobile or 'Not set' }}</div>
                     </div>
 
                     <div class="info-item">
-                        <div class="info-label">Location</div>
-                        <div class="info-value">{{ user.location or 'Not set' }}</div>
+                        <div class="info-label">Account Role</div>
+                        <div class="info-value">
+                            <span class="badge bg-success">{{ session.get('role') or user.role or 'Farmer' }}</span>
+                        </div>
                     </div>
 
                     <div class="info-item">
                         <div class="info-label">Member Since</div>
-                        <div class="info-value">{{ user.created_at[:10] if user.created_at else 'Not available' }}</div>
+                        <div class="info-value">{{ user.created_at.strftime('%Y-%m-%d') if user.created_at else '2025-01-01' }}</div>
                     </div>
-                    
-                    <div class="info-item">
-                        <div class="info-label">Preferred Language</div>
-                        <div class="info-value">
-                            <span class="badge bg-info">{{ user.language|default('English') }}</span>
-                        </div>
-                    </div>
-                    <!-- END CHANGED SECTION -->
                     
                     <div class="text-center mt-4">
                         <button class="btn btn-edit" data-bs-toggle="modal" data-bs-target="#editProfileModal">
@@ -373,52 +338,16 @@
                         </button>
                     </div>
                 </div>
-
-                <!-- Preferences Card -->
-                <div class="info-card">
-                    <h3 class="section-title">
-                        <i class="fas fa-cog me-2"></i>Preferences
-                    </h3>
-                    
-                    <div class="info-item">
-                        <div class="info-label">Email Notifications</div>
-                        <div class="info-value">
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" id="emailNotifications" {% if user.email_notifications %}checked{% endif %}>
-                                <label class="form-check-label" for="emailNotifications">Receive email alerts</label>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="info-item">
-                        <div class="info-label">Default Language</div>
-                        <div class="info-value">
-                            <select class="form-select" id="languageSelect">
-                                <option value="en" {% if user.language == 'en' %}selected{% endif %}>English</option>
-                                <option value="hi" {% if user.language == 'hi' %}selected{% endif %}>Hindi</option>
-                                <option value="mr" {% if user.language == 'mr' %}selected{% endif %}>Marathi</option>
-                            </select>
-                        </div>
-                    </div>
-                    
-                    <div class="text-center mt-4">
-                        <button class="btn btn-edit" onclick="savePreferences()">
-                            <i class="fas fa-save me-2"></i>Save Preferences
-                        </button>
-                    </div>
-                </div>
             </div>
 
-            <!-- Right Column: Activity & Recent Scans -->
+            <!-- Recent Activity -->
             <div class="col-lg-6 mb-4">
                 <div class="info-card">
-                    <h3 class="section-title">
-                        <i class="fas fa-history me-2"></i>Recent Activity
-                    </h3>
+                    <h3 class="section-title"><i class="fas fa-history me-2"></i>Recent Activity</h3>
                     
                     {% if recent_activity %}
                     <ul class="recent-activity">
-                        {% for activity in recent_activity %}
+                        {% for activity in recent_activity[:5] %}
                         <li class="activity-item">
                             <div class="d-flex justify-content-between align-items-start">
                                 <div>
@@ -451,30 +380,22 @@
 
                 <!-- Recent Scans -->
                 <div class="info-card">
-                    <h3 class="section-title">
-                        <i class="fas fa-file-alt me-2"></i>Recent Scans
-                    </h3>
+                    <h3 class="section-title"><i class="fas fa-file-alt me-2"></i>Recent Scans</h3>
                     
                     {% if recent_scans %}
                     <div class="table-responsive">
                         <table class="table table-hover">
                             <thead>
-                                <tr>
-                                    <th>Date</th>
-                                    <th>Content</th>
-                                    <th>Result</th>
-                                </tr>
+                                <tr><th>Date</th><th>Content</th><th>Result</th></tr>
                             </thead>
                             <tbody>
-                                {% for scan in recent_scans %}
+                                {% for scan in recent_scans[:5] %}
                                 <tr>
                                     <td>{{ scan.date[:10] if scan.date else 'N/A' }}</td>
-                                    <td class="text-truncate" style="max-width: 150px;">{{ scan.content[:50] }}...</td>
+                                    <td class="text-truncate" style="max-width: 150px;">{{ scan.content[:50] if scan.content else 'N/A' }}...</td>
                                     <td>
                                         {% if 'Genuine' in scan.result or 'Safe' in scan.result %}
                                         <span class="badge bg-success">Genuine</span>
-                                        {% elif 'Suspicious' in scan.result %}
-                                        <span class="badge bg-warning">Suspicious</span>
                                         {% elif 'Fraud' in scan.result or 'Risk' in scan.result %}
                                         <span class="badge bg-danger">Fraud</span>
                                         {% else %}
@@ -513,22 +434,17 @@
                 </div>
                 <div class="modal-body">
                     <form id="editProfileForm">
-                        <!-- CHANGED: Updated form fields -->
                         <div class="mb-3">
-                            <label for="editFullName" class="form-label">Full Name</label>
-                            <input type="text" class="form-control" id="editFullName" value="{{ user.fullname or user.username }}">
+                            <label class="form-label">Full Name</label>
+                            <input type="text" class="form-control" id="editFullName" value="{{ session.get('username') or session.get('user') or user.fullname or user.username or '' }}">
                         </div>
                         <div class="mb-3">
-                            <label for="editEmail" class="form-label">Email Address</label>
-                            <input type="email" class="form-control" id="editEmail" value="{{ user.email }}">
+                            <label class="form-label">Email</label>
+                            <input type="email" class="form-control" id="editEmail" value="{{ session.get('email') or user.email or '' }}">
                         </div>
                         <div class="mb-3">
-                            <label for="editPhone" class="form-label">Phone Number</label>
-                            <input type="tel" class="form-control" id="editPhone" value="{{ user.mobile or '' }}">
-                        </div>
-                        <div class="mb-3">
-                            <label for="editLocation" class="form-label">Location</label>
-                            <input type="text" class="form-control" id="editLocation" value="{{ user.location or '' }}">
+                            <label class="form-label">Phone</label>
+                            <input type="tel" class="form-control" id="editPhone" value="{{ session.get('mobile') or user.mobile or '' }}">
                         </div>
                     </form>
                 </div>
@@ -540,15 +456,12 @@
         </div>
     </div>
 
-    <!-- Footer -->
     <footer class="footer mt-5 py-4" style="background-color: var(--primary-color); color: white;">
         <div class="container text-center">
             <p>&copy; 2025 AgriGuard Fraud Detection System. All rights reserved.</p>
-            <p class="mb-0">Protecting Farmers from Fraudulent Advertisements</p>
         </div>
     </footer>
 
-    <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
     
     <script>
@@ -558,12 +471,6 @@
                 const formData = new FormData();
                 formData.append('profile_pic', file);
                 
-                // Show loading state
-                const placeholder = document.querySelector('.profile-pic-placeholder');
-                if (placeholder) {
-                    placeholder.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-                }
-                
                 fetch('/upload_profile_pic', {
                     method: 'POST',
                     body: formData
@@ -571,139 +478,62 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        // Update profile image
-                        const reader = new FileReader();
-                        reader.onload = function(e) {
-                            const profilePicContainer = document.querySelector('.profile-pic-container');
-                            profilePicContainer.innerHTML = `
-                                <img src="${e.target.result}" alt="Profile Picture" class="profile-pic">
-                                <div class="file-upload mt-3">
-                                    <button class="btn btn-light btn-sm" onclick="document.getElementById('profilePicInput').click()">
-                                        <i class="fas fa-camera"></i> Change Photo
-                                    </button>
-                                    <input type="file" id="profilePicInput" accept="image/*" style="display: none;" onchange="uploadProfilePicture(this)">
-                                </div>
-                            `;
-                        };
-                        reader.readAsDataURL(file);
-                        
-                        // Show success message
-                        showAlert('Profile picture updated successfully!', 'success');
+                        location.reload();
                     } else {
-                        showAlert(data.message || 'Failed to upload picture', 'error');
+                        alert(data.message || 'Failed to upload picture');
                     }
                 })
                 .catch(error => {
                     console.error('Error:', error);
-                    showAlert('Error uploading picture', 'error');
+                    alert('Error uploading picture');
                 });
             }
-        }
-        
-        function savePreferences() {
-            const emailNotifications = document.getElementById('emailNotifications').checked;
-            const language = document.getElementById('languageSelect').value;
-            
-            fetch('/update_preferences', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    email_notifications: emailNotifications,
-                    language: language
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    showAlert('Preferences saved successfully!', 'success');
-                } else {
-                    showAlert(data.message || 'Failed to save preferences', 'error');
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                showAlert('Error saving preferences', 'error');
-            });
         }
         
         function saveProfileChanges() {
             const fullName = document.getElementById('editFullName').value;
             const email = document.getElementById('editEmail').value;
             const phone = document.getElementById('editPhone').value;
-            const location = document.getElementById('editLocation').value;
             
             fetch('/update_profile', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     fullname: fullName,
                     email: email,
-                    phone: phone,
-                    location: location
+                    phone: phone
                 })
             })
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    // Close modal
                     const modal = bootstrap.Modal.getInstance(document.getElementById('editProfileModal'));
                     modal.hide();
-                    
-                    // Update page content
-                    document.querySelector('.profile-header h1').textContent = fullName;
-                    document.querySelector('.profile-header .lead').textContent = email;
-                    
-                    // Update the Personal Information section
-                    document.querySelectorAll('.info-item')[0].querySelector('.info-value').textContent = fullName;
-                    document.querySelectorAll('.info-item')[1].querySelector('.info-value').textContent = email;
-                    document.querySelectorAll('.info-item')[2].querySelector('.info-value').textContent = phone || 'Not set';
-                    document.querySelectorAll('.info-item')[3].querySelector('.info-value').textContent = location || 'Not set';
-                    
-                    showAlert('Profile updated successfully!', 'success');
+                    location.reload();
                 } else {
-                    showAlert(data.message || 'Failed to update profile', 'error');
+                    alert(data.message || 'Failed to update profile');
                 }
             })
             .catch(error => {
                 console.error('Error:', error);
-                showAlert('Error updating profile', 'error');
+                alert('Error updating profile');
             });
         }
-        
-        function showAlert(message, type) {
-            // Create alert element
-            const alertDiv = document.createElement('div');
-            alertDiv.className = `alert alert-${type === 'success' ? 'success' : 'danger'} alert-dismissible fade show`;
-            alertDiv.style.position = 'fixed';
-            alertDiv.style.top = '20px';
-            alertDiv.style.right = '20px';
-            alertDiv.style.zIndex = '9999';
-            alertDiv.style.minWidth = '300px';
-            alertDiv.innerHTML = `
-                ${message}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            `;
-            
-            // Add to page
-            document.body.appendChild(alertDiv);
-            
-            // Auto remove after 5 seconds
-            setTimeout(() => {
-                alertDiv.remove();
-            }, 5000);
-        }
-        
-        // Initialize tooltips
-        document.addEventListener('DOMContentLoaded', function() {
-            var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-            var tooltipList = tooltipTriggerList.map(function(tooltipTriggerEl) {
-                return new bootstrap.Tooltip(tooltipTriggerEl);
-            });
-        });
     </script>
 </body>
+<!-- TEMPORARY DEBUG - Remove after fixing -->
+<div style="background: yellow; padding: 10px; margin: 10px; border: 2px solid red;">
+    <h3>DEBUG INFO - What's in Session?</h3>
+    <p><strong>session.get('user'):</strong> {{ session.get('user') }}</p>
+    <p><strong>session.get('username'):</strong> {{ session.get('username') }}</p>
+    <p><strong>session.get('email'):</strong> {{ session.get('email') }}</p>
+    <p><strong>session.get('mobile'):</strong> {{ session.get('mobile') }}</p>
+    <p><strong>session.get('role'):</strong> {{ session.get('role') }}</p>
+    <p><strong>session.get('user_id'):</strong> {{ session.get('user_id') }}</p>
+    <p><strong>All session keys:</strong> {{ session.keys()|list }}</p>
+    <hr>
+    <p><strong>user object (from database):</strong> {{ user }}</p>
+    <p><strong>user.username:</strong> {{ user.username if user else 'No user object' }}</p>
+    <p><strong>user.email:</strong> {{ user.email if user else 'No user object' }}</p>
+</div>
 </html>
