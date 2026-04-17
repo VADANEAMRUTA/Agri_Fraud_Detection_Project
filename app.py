@@ -38,7 +38,7 @@ import secrets
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from content_validator import ContentValidator
+# from content_validator import ContentValidator  # Temporarily disabled
 # Import the database instance
 from database import db_instance
 
@@ -920,7 +920,7 @@ def check_government_domain_first(url, content=""):
     return None
 
 # ---------------- OCR HELPER FUNCTIONS ----------------
-from content_validator import ContentValidator
+# from content_validator import ContentValidator  # Temporarily disabled
 
 @app.route('/process_image', methods=['POST'])
 def process_image():
@@ -936,15 +936,19 @@ def process_image():
     upload_path = os.path.join('static', 'uploads', filename)
     file.save(upload_path)
     
-    # STEP 1: VALIDATE CONTENT BEFORE PROCESSING
-    is_valid, validation_msg, extracted_text = ContentValidator.validate_image(upload_path)
+    # STEP 1: VALIDATE CONTENT BEFORE PROCESSING (DISABLED)
+    # is_valid, validation_msg, extracted_text = ContentValidator.validate_image(upload_path)
+    # Temporarily skip validation - proceed directly to OCR
+    is_valid = True
+    validation_msg = "Validation skipped"
+    extracted_text = ""
     
-    # If not agriculture-related, show warning
-    if not is_valid:
-        return render_template('non_agriculture_warning.html',
-                             image=upload_path,
-                             message=validation_msg,
-                             extracted_text=extracted_text[:500] if extracted_text else "")
+    # If not agriculture-related, show warning (skipped for now)
+    # if not is_valid:
+    #     return render_template('non_agriculture_warning.html',
+    #                          image=upload_path,
+    #                          message=validation_msg,
+    #                          extracted_text=extracted_text[:500] if extracted_text else "")
     
     # STEP 2: If valid, proceed with enhanced OCR
     if len(extracted_text) < 50:  # If validation extracted minimal text
