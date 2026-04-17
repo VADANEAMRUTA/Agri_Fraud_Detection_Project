@@ -9,6 +9,11 @@ print("ENVIRONMENT VARIABLES CHECK:")
 print(f"ADMIN_SECRET_KEY: '{os.getenv('ADMIN_SECRET_KEY')}'")
 print(f"ADMIN_REGISTRATION_KEY: '{os.getenv('ADMIN_REGISTRATION_KEY')}'")
 print("DB HOST:", os.getenv("DB_HOST"))
+print("MYSQL HOST:", os.getenv("MYSQL_HOST"))
+print("MYSQL PORT:", os.getenv("MYSQL_PORT"))
+print("MYSQL USER:", os.getenv("MYSQL_USER"))
+print("MYSQL DB USERS:", os.getenv("MYSQL_DB_USERS"))
+print("MYSQL DB AGRIGUARD:", os.getenv("MYSQL_DB_AGRIGUARD"))
 print("=" * 50)
 
 import sqlite3
@@ -137,13 +142,49 @@ def login_required(f):
     return decorated_function
 
 # ---------------- MYSQL HELPER ----------------
-def get_mysql_connection():
+def _safe_int_env(name, default):
+    raw_value = os.getenv(name)
+    if raw_value is None or raw_value == "":
+        return int(default)
+    try:
+        return int(raw_value)
+    except ValueError:
+        print(f"DEBUG: Environment variable {name} has invalid value '{raw_value}', using default {default}")
+        return int(default)
+
+
+def get_mysql_connection(database=None):
+    host = os.getenv("MYSQL_HOST") or os.getenv("DB_HOST") or "127.0.0.1"
+    port = _safe_int_env("MYSQL_PORT", os.getenv("DB_PORT", 3306) or 3306)
+    user = os.getenv("MYSQL_USER") or os.getenv("DB_USER") or "root"
+    password = os.getenv("MYSQL_PASSWORD") or os.getenv("DB_PASSWORD") or ""
+    database = (
+        database
+        or os.getenv("MYSQL_DB_USERS")
+        or os.getenv("MYSQL_DB_AGRIGUARD")
+        or os.getenv("DB_NAME")
+        or "railway"
+    )
+
+    print("DEBUG: Building MySQL connection with:", {
+        'host': host,
+        'port': port,
+        'user': user,
+        'database': database,
+        'password_set': bool(password)
+    })
+
+    if not host or not user or not database:
+        raise ValueError(
+            "Missing MySQL configuration: set MYSQL_HOST, MYSQL_USER, and MYSQL_DB_USERS or equivalent env vars."
+        )
+
     return mysql.connector.connect(
-        host=os.getenv("DB_HOST"),
-        port=int(os.getenv("DB_PORT")),
-        user=os.getenv("DB_USER"),
-        password=os.getenv("DB_PASSWORD"),
-        database=os.getenv("DB_NAME")
+        host=host,
+        port=port,
+        user=user,
+        password=password,
+        database=database,
     )
 
 # ---------------- ADMIN REQUIRED DECORATOR ----------------
@@ -2011,6 +2052,25 @@ def login():
 
     if not identifier or not password:
         flash("Please enter both username/email/mobile and password", "error")
+        return render_template("login.html")
+
+    mysql_host = os.getenv("MYSQL_HOST") or os.getenv("DB_HOST")
+    mysql_port = os.getenv("MYSQL_PORT") or os.getenv("DB_PORT")
+    mysql_user = os.getenv("MYSQL_USER") or os.getenv("DB_USER")
+    mysql_db_users = os.getenv("MYSQL_DB_USERS") or os.getenv("MYSQL_DB_AGRIGUARD") or os.getenv("DB_NAME")
+
+    print("DEBUG: Login DB env values:", {
+        'MYSQL_HOST': mysql_host,
+        'MYSQL_PORT': mysql_port,
+        'MYSQL_USER': mysql_user,
+        'MYSQL_DB_USERS': mysql_db_users,
+    })
+
+    if not mysql_host or not mysql_port or not mysql_user or not mysql_db_users:
+        flash(
+            "Login configuration error: missing required database environment variables. Please check Render settings.",
+            "error"
+        )
         return render_template("login.html")
 
     try:
