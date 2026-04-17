@@ -4340,10 +4340,12 @@ def get_admin_dashboard_context():
     users = []
     fraud_checks = []
     error_message = None
+    conn = None
 
     try:
         conn = get_mysql_connection()
         cursor = conn.cursor(dictionary=True)
+
         cursor.execute("SELECT id, username, email, mobile, role, created_at FROM users ORDER BY created_at DESC")
         users = cursor.fetchall() or []
 
@@ -4358,49 +4360,46 @@ def get_admin_dashboard_context():
         stats['total_users'] = int(counts.get('total_users') or 0)
         stats['admin_users'] = int(counts.get('admin_users') or 0)
         stats['farmer_users'] = int(counts.get('farmer_users') or 0)
-        cursor.close()
-        conn.close()
-    except Exception as e:
-        print(f"❌ Error loading admin users from MySQL: {e}")
-        error_message = "Unable to load user data from MySQL. Please check the database connection."
 
-    try:
-        conn_scan = sqlite3.connect('users.db')
-        conn_scan.row_factory = sqlite3.Row
-        cursor_scan = conn_scan.cursor()
-        cursor_scan.execute("""
+        cursor.execute("""
             SELECT
                 s.id,
                 s.user_id,
+                COALESCE(u.username, 'Anonymous') AS username,
+                s.content_type,
                 s.content,
                 s.result,
                 s.confidence,
-                s.created_at,
-                COALESCE(u.username, 'Anonymous') AS username
+                s.created_at
             FROM scans s
             LEFT JOIN users u ON s.user_id = u.id
             ORDER BY s.created_at DESC
             LIMIT 100
         """)
-        fraud_checks = [dict(row) for row in cursor_scan.fetchall()]
+        fraud_checks = cursor.fetchall() or []
 
-        cursor_scan.execute("""
+        cursor.execute("""
             SELECT
                 COUNT(*) AS total_checks,
                 SUM(CASE WHEN LOWER(result) LIKE '%fraud%' OR LOWER(result) LIKE '%risk%' THEN 1 ELSE 0 END) AS fraud_count
             FROM scans
         """)
-        fraud_counts = cursor_scan.fetchone() or {}
+        fraud_counts = cursor.fetchone() or {}
         stats['total_fraud_checks'] = int(fraud_counts.get('total_checks') or 0)
         fraud_count = int(fraud_counts.get('fraud_count') or 0)
         if stats['total_fraud_checks'] > 0:
             stats['fraud_rate'] = round((fraud_count / stats['total_fraud_checks']) * 100, 1)
-        cursor_scan.close()
-        conn_scan.close()
+
+        cursor.close()
     except Exception as e:
-        print(f"❌ Error loading fraud checks from SQLite: {e}")
-        if not error_message:
-            error_message = "Unable to load fraud check data. Please verify users.db exists and is accessible."
+        print(f"❌ Error loading admin dashboard data: {e}")
+        error_message = (
+            "Unable to load admin dashboard data from MySQL. "
+            "Please verify Render/MySQL environment variables and database connectivity."
+        )
+    finally:
+        if conn is not None and conn.is_connected():
+            conn.close()
 
     return {
         'stats': stats,
@@ -4585,35 +4584,84 @@ def admin_get_users():
 @admin_required
 def admin_get_fraud_checks():
     try:
-        conn = sqlite3.connect('users.db')
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
+        conn = get_mysql_connection()
+        cursor = conn.cursor(dictionary=True)
         cursor.execute("""
-            SELECT s.id, s.user_id, s.content_type as input_type, s.content, s.result, s.confidence, s.created_at,
-                   u.username
+            SELECT
+                s.id,
+                s.user_id,
+                COALESCE(u.username, 'Anonymous') AS username,
+                s.content_type AS input_type,
+                s.content,
+                s.result,
+                s.confidence,
+                s.created_at
             FROM scans s
             LEFT JOIN users u ON s.user_id = u.id
             ORDER BY s.created_at DESC
             LIMIT 50
         """)
-        checks = []
-        for row in cursor.fetchall():
-            checks.append({
-                'id': row['id'],
-                'user_id': row['user_id'],
-                'username': row['username'] or 'Anonymous',
-                'input_type': row['input_type'] or 'Unknown',
-                'content': row['content'] or '',
-                'result': row['result'] or 'Unknown',
-                'confidence': row['confidence'] or 0,
-                'created_at': row['created_at']
-            })
+        checks = cursor.fetchall() or []
         cursor.close()
         conn.close()
         return jsonify({'checks': checks})
     except Exception as e:
-        print(f"❌ Error fetching fraud checks: {e}")
+        print(f"❌ Error fetching fraud checks from MySQL: {e}")
         return jsonify({'checks': []}), 500
+
+
+@app.route('/debug-admin-data')
+@admin_required
+def debug_admin_data():
+    try:
+        conn = get_mysql_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        cursor.execute("SELECT id, username, email, mobile, role, created_at FROM users ORDER BY created_at DESC")
+        users = cursor.fetchall() or []
+
+        cursor.execute("""
+            SELECT
+                s.id,
+                s.user_id,
+                COALESCE(u.username, 'Anonymous') AS username,
+                s.content_type,
+                s.content,
+                s.result,
+                s.confidence,
+                s.created_at
+            FROM scans s
+            LEFT JOIN users u ON s.user_id = u.id
+            ORDER BY s.created_at DESC
+            LIMIT 200
+        """)
+        scans = cursor.fetchall() or []
+
+        cursor.execute("SELECT COUNT(*) AS user_count FROM users")
+        user_count = int(cursor.fetchone().get('user_count') or 0)
+
+        cursor.execute("SELECT COUNT(*) AS scan_count FROM scans")
+        scan_count = int(cursor.fetchone().get('scan_count') or 0)
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            'users': users,
+            'scans': scans,
+            'stats': {
+                'user_count': user_count,
+                'scan_count': scan_count
+            }
+        })
+    except Exception as e:
+        print(f"❌ /debug-admin-data failed: {e}")
+        return jsonify({
+            'error': str(e),
+            'users': [],
+            'scans': [],
+            'stats': {'user_count': 0, 'scan_count': 0}
+        }), 500
 
 
 @app.route('/admin/get_settings')

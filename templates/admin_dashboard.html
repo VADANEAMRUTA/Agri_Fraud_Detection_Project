@@ -386,6 +386,15 @@
             background: #f6faf6;
         }
 
+        .alert {
+            padding: 22px 18px;
+            border-radius: 18px;
+            color: #1f3f34;
+            background: #e7f5ea;
+            border: 1px solid #cde5d4;
+            margin-bottom: 24px;
+        }
+
         .report-summary {
             display: grid;
             gap: 18px;
@@ -915,6 +924,9 @@
             </header>
 
             <section class='content'>
+                {% if error_message %}
+                    <div class='alert'>{{ error_message }}</div>
+                {% endif %}
                 <div id='dashboard' class='section active'>
                     <div class='section-header'>
                         <div>
