@@ -19,16 +19,13 @@ print("=" * 50)
 import sqlite3
 import mysql.connector
 from flask import Flask, request, render_template, redirect, session, flash, jsonify, url_for, Response, make_response
-from PIL import Image, ImageEnhance, ImageFilter
-import pytesseract
-import cv2
+from PIL import Image, ImageDraw
 import io
 import csv
 import re
 import os
 import tempfile
 import requests
-import numpy as np
 from bs4 import BeautifulSoup
 import urllib.parse
 from urllib.parse import urlparse
@@ -45,54 +42,91 @@ from content_validator import ContentValidator
 # Import the database instance
 from database import db_instance
 
-# ---------------- TESSERACT AUTO-DETECTION ----------------
-def find_tesseract_executable():
-    """Auto-detect Tesseract executable path for any OS"""
-    try:
-        # First, try to find tesseract in PATH
-        tesseract_cmd = shutil.which('tesseract')
-        if tesseract_cmd:
-            print(f"✅ Tesseract found in PATH: {tesseract_cmd}")
-            return tesseract_cmd
-        
-        # Common installation paths for different OS
-        common_paths = [
-            # Windows paths
-            r"C:\Program Files\Tesseract-OCR\tesseract.exe",
-            r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
-            r"C:\Users\%USERNAME%\AppData\Local\Programs\Tesseract-OCR\tesseract.exe",
-            # Linux paths
-            "/usr/bin/tesseract",
-            "/usr/local/bin/tesseract",
-            "/opt/tesseract/bin/tesseract",
-            # macOS paths
-            "/usr/local/bin/tesseract",
-            "/opt/homebrew/bin/tesseract",
-        ]
-        
-        for path in common_paths:
-            # Expand environment variables in Windows paths
-            expanded_path = os.path.expandvars(path)
-            if os.path.exists(expanded_path):
-                print(f"✅ Tesseract found at: {expanded_path}")
-                return expanded_path
-        
-        print("❌ Tesseract executable not found in common locations")
-        return None
-        
-    except Exception as e:
-        print(f"❌ Error detecting Tesseract: {e}")
-        return None
+# ---------------- OCR.space CONFIGURATION ----------------
+OCRSPACE_API_URL = "https://api.ocr.space/parse/image"
+OCRSPACE_API_KEY = os.getenv("OCR_SPACE_API_KEY", "helloworld")
+OCRSPACE_API_TIMEOUT = 30
+OCRSPACE_DEFAULT_LANGUAGE = "eng"
 
-# Set Tesseract path
-TESSERACT_PATH = find_tesseract_executable()
-if TESSERACT_PATH:
-    pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
-    print(f"🔧 Tesseract configured: {TESSERACT_PATH}")
-else:
-    print("⚠️ Tesseract not found - OCR features will not work")
-    print("   On Linux: sudo apt-get install tesseract-ocr tesseract-ocr-hin tesseract-ocr-ben")
-    print("   On Windows: Download from https://github.com/UB-Mannheim/tesseract/wiki")
+
+def normalize_ocr_language(selected_language="eng"):
+    """Map UI language choices to OCR.space language codes."""
+    language_map = {
+        "en": "eng",
+        "eng": "eng",
+        "english": "eng",
+        "hi": "hin",
+        "hin": "hin",
+        "hindi": "hin",
+        "bn": "ben",
+        "ben": "ben",
+        "bengali": "ben",
+        "mr": "hin",
+        "marathi": "hin",
+    }
+    return language_map.get((selected_language or "").strip().lower(), OCRSPACE_DEFAULT_LANGUAGE)
+
+
+def extract_text_with_ocrspace(image_path, selected_language="eng"):
+    """Extract text from an image using the OCR.space API."""
+    language = normalize_ocr_language(selected_language)
+
+    # Build request payload
+    data = {
+        "apikey": OCRSPACE_API_KEY,
+        "language": language,
+        "isOverlayRequired": False,
+        "OCREngine": 2,
+    }
+
+    files = None
+    file_handle = None
+    try:
+        if hasattr(image_path, "read"):
+            raw_bytes = image_path.read()
+            if not raw_bytes:
+                return "OCR Error: Uploaded image file is empty."
+            files = {"file": (getattr(image_path, 'filename', 'image.jpg'), raw_bytes)}
+        else:
+            file_handle = open(image_path, "rb")
+            files = {"file": file_handle}
+
+        response = requests.post(
+            OCRSPACE_API_URL,
+            files=files,
+            data=data,
+            timeout=OCRSPACE_API_TIMEOUT,
+        )
+    except requests.RequestException as exc:
+        return "OCR Error: OCR service unavailable. Please try again later."
+    finally:
+        if file_handle is not None:
+            file_handle.close()
+
+    if response.status_code != 200:
+        return f"OCR Error: OCR service returned HTTP {response.status_code}."
+
+    try:
+        result = response.json()
+    except ValueError:
+        return "OCR Error: Invalid response from OCR service."
+
+    if result.get("IsErroredOnProcessing"):
+        errors = result.get("ErrorMessage") or result.get("ErrorDetails") or "Unknown OCR error."
+        if isinstance(errors, list):
+            errors = "; ".join(str(err) for err in errors if err)
+        return f"OCR Error: {errors}"
+
+    parsed_results = result.get("ParsedResults")
+    if not parsed_results:
+        return "OCR Error: No text returned by OCR service."
+
+    parsed_text = parsed_results[0].get("ParsedText", "")
+    parsed_text = parsed_text.strip()
+    if not parsed_text:
+        return "No text extracted. Please try a clearer image."
+
+    return parsed_text
 
 
 # Import ML model - handle import errors gracefully
@@ -967,126 +1001,8 @@ def is_agriculture_content(text):
     count = sum(1 for keyword in agri_indicators if keyword in text_lower)
     return count >= 2  # At least 2 agriculture indicators
 #---------------------------------------
-def extract_text_from_image(image_path):
-    """Extract text from image with improved OCR settings"""
-    try:
-        # Check if Tesseract is available
-        if not TESSERACT_PATH:
-            return "ERROR: Tesseract OCR not installed on this server. Please contact administrator."
-        
-        # Try multiple languages and configurations
-        configs = [
-            '--oem 3 --psm 6 -l eng',  # English
-            '--oem 3 --psm 6 -l hin',  # Hindi
-            '--oem 3 --psm 6 -l eng+hin',  # Both English and Hindi
-            '--oem 3 --psm 11',  # Sparse text
-            '--oem 3 --psm 12',  # Sparse text with orientation
-        ]
-        
-        best_text = ""
-        best_score = 0
-        
-        for config in configs:
-            try:
-                text = pytesseract.image_to_string(Image.open(image_path), config=config)
-                # Score the extracted text (more meaningful words = higher score)
-                meaningful_words = [word for word in text.split() if len(word) > 2 and word.isalpha()]
-                score = len(meaningful_words)
-                
-                if score > best_score:
-                    best_score = score
-                    best_text = text
-            except:
-                continue
-        
-        # If no good text found, try with preprocessing
-        if best_score < 5:
-            text = extract_text_with_preprocessing(image_path)
-            return text if text else "Could not extract text. Please ensure clear image with visible text."
-        
-        return best_text.strip() if best_text.strip() else "No text extracted. Image may be blurry or text not visible."
-    
-    except Exception as e:
-        return f"OCR Error: {str(e)}"
 
-import pytesseract
-from PIL import Image, ImageEnhance, ImageFilter
-import cv2
-import numpy as np
-import os
 
-def extract_text_from_image(image_path):
-    """
-    WORKING OCR FUNCTION - Properly extracts text from fertilizer images
-    """
-    try:
-        # Check if Tesseract is available
-        if not TESSERACT_PATH:
-            return "ERROR: Tesseract OCR not installed on this server. Please contact administrator."
-        
-        # Open image
-        img = Image.open(image_path)
-        
-        # 3. PREPROCESSING - CRITICAL FOR GOOD OCR
-        # Convert to grayscale
-        if img.mode != 'L':
-            img = img.convert('L')
-        
-        # Increase size if too small
-        if img.width < 600:
-            new_width = 1200
-            ratio = new_width / img.width
-            new_height = int(img.height * ratio)
-            img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
-        
-        # Increase contrast
-        enhancer = ImageEnhance.Contrast(img)
-        img = enhancer.enhance(3.0)  # Strong contrast
-        
-        # Increase sharpness
-        enhancer = ImageEnhance.Sharpness(img)
-        img = enhancer.enhance(2.0)
-        
-        # Apply slight blur to reduce noise
-        img = img.filter(ImageFilter.MedianFilter(3))
-        
-        # 4. OCR WITH OPTIMAL SETTINGS
-        # Try multiple configurations to get best result
-        configs = [
-            '--psm 6 --oem 3 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.:%/- ',  # Block of text
-            '--psm 11 --oem 3',  # Sparse text
-            '--psm 12 --oem 3',  # Sparse text with OSD
-            '--psm 13 --oem 3',  # Raw line
-        ]
-        
-        best_text = ""
-        best_length = 0
-        
-        for config in configs:
-            try:
-                text = pytesseract.image_to_string(img, config=config)
-                # Clean the text
-                text = ' '.join(text.split())  # Remove extra whitespace
-                
-                # Check if this result is better
-                if len(text) > best_length and "¢" not in text and "€" not in text:
-                    best_text = text
-                    best_length = len(text)
-            except:
-                continue
-        
-        # If no good text, try simple method
-        if not best_text or len(best_text) < 20:
-            text = pytesseract.image_to_string(img, lang='eng')
-            best_text = text
-        
-        # Clean up the extracted text
-        best_text = clean_ocr_text(best_text)
-        
-        return best_text if best_text.strip() else "No text could be extracted. Please try with a clearer image."
-    
-    except Exception as e:
-        return f"OCR Error: {str(e)}"
 
 def clean_ocr_text(text):
     """Clean OCR extracted text"""
@@ -1123,8 +1039,6 @@ def clean_ocr_text(text):
     return text.strip()
 
 
-SUPPORTED_LANGS = "eng+hin+ben"
-FAST_OCR_CONFIG = "--oem 3 --psm 6"
 
 
 def _read_image_bytes(image_file):
@@ -1160,72 +1074,6 @@ def compress_image(image_file, max_size=1024, quality=85):
     return output
 
 
-def normalize_ocr_language(selected_language=None):
-    """Map UI/session language choices to the fastest useful Tesseract language set."""
-    language_map = {
-        "en": SUPPORTED_LANGS,
-        "eng": "eng",
-        "english": "eng",
-        "hi": "eng+hin",
-        "hin": "eng+hin",
-        "hindi": "eng+hin",
-        "mr": "eng+hin",
-        "marathi": "eng+hin",
-        "bn": "eng+ben",
-        "ben": "eng+ben",
-        "bengali": "eng+ben",
-    }
-    return language_map.get((selected_language or "").strip().lower(), SUPPORTED_LANGS)
-
-
-def preprocess_image_for_ocr(image_file):
-    """Preprocess image to improve OCR accuracy while keeping OCR reasonably fast."""
-    compressed_stream = compress_image(image_file)
-    pil_image = Image.open(compressed_stream).convert("RGB")
-    image_bgr = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
-    gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
-
-    contrast = cv2.convertScaleAbs(gray, alpha=1.25, beta=8)
-    denoised = cv2.fastNlMeansDenoising(contrast, None, 9, 7, 21)
-    adaptive = cv2.adaptiveThreshold(
-        denoised,
-        255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY,
-        21,
-        8,
-    )
-    otsu = cv2.threshold(denoised, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
-    return {
-        "rgb": pil_image,
-        "gray": gray,
-        "contrast": contrast,
-        "denoised": denoised,
-        "adaptive": adaptive,
-        "otsu": otsu,
-    }
-
-
-def detect_image_language(image_file):
-    """Detect primary language in image using OCR heuristics."""
-    processed_images = preprocess_image_for_ocr(image_file)
-    candidates = ["eng+hin+ben", "eng+ben", "eng+hin", "eng"]
-    best_lang = "eng"
-    best_score = -1
-
-    for lang in candidates:
-        try:
-            sample = pytesseract.image_to_string(processed_images["adaptive"], lang=lang, config="--oem 3 --psm 6")
-        except Exception:
-            continue
-        bengali_chars = len(re.findall(r"[\u0980-\u09ff]", sample))
-        devanagari_chars = len(re.findall(r"[\u0900-\u097f]", sample))
-        latin_words = len(re.findall(r"[A-Za-z]{2,}", sample))
-        score = bengali_chars * 3 + devanagari_chars * 2 + latin_words
-        if score > best_score:
-            best_score = score
-            best_lang = lang
-    return best_lang
 
 
 def _recover_structured_tokens(text):
@@ -1259,55 +1107,10 @@ def is_valid_text(text):
 
 
 def extract_text_from_image(image_file, selected_language="eng"):
-    """Extract text from uploaded image using balanced OCR speed and accuracy."""
+    """Extract text from uploaded image using OCR.space."""
     try:
-        # Check if Tesseract is available
-        if not TESSERACT_PATH:
-            return "ERROR: Tesseract OCR not installed on this server. Please contact administrator."
-
-        processed_images = preprocess_image_for_ocr(image_file)
-        ocr_language = normalize_ocr_language(selected_language)
-        image_variants = [
-            processed_images["adaptive"],
-            processed_images["otsu"],
-            processed_images["denoised"],
-        ]
-        best_text = ""
-        best_score = -1
-        last_error = None
-
-        for image_variant in image_variants:
-            try:
-                extracted = pytesseract.image_to_string(
-                    image_variant,
-                    lang=ocr_language,
-                    config=f"{FAST_OCR_CONFIG} -l {ocr_language}"
-                )
-            except Exception as exc:
-                last_error = exc
-                continue
-
-            cleaned = clean_ocr_text(" ".join(extracted.split()).replace("|", "I"))
-            structured_tokens = _recover_structured_tokens(cleaned)
-            score = (
-                len(re.findall(r"[A-Za-z\u0900-\u097f\u0980-\u09ff]{2,}", cleaned))
-                + len(structured_tokens) * 4
-                + (15 if is_valid_text(cleaned) else 0)
-            )
-            if score > best_score:
-                best_score = score
-                best_text = cleaned
-
-        if not best_text and last_error:
-            return f"OCR Error: {last_error}"
-
-        structured_tokens = _recover_structured_tokens(best_text)
-        if structured_tokens:
-            token_suffix = " ".join(token for token in structured_tokens if token.lower() not in best_text.lower())
-            if token_suffix:
-                best_text = f"{best_text} {token_suffix}".strip()
-
-        return best_text.strip() or "No text detected in image"
+        extracted_text = extract_text_with_ocrspace(image_file, selected_language=selected_language)
+        return extracted_text
     except Exception as exc:
         print(f"OCR Error: {exc}")
         return f"OCR Error: {exc}"
@@ -2439,77 +2242,62 @@ def check_session():
 # ---------------- OCR DIAGNOSTIC ROUTE ----------------
 @app.route('/check-ocr')
 def check_ocr():
-    """Diagnostic route to check Tesseract OCR installation and functionality"""
-    import subprocess
-    
-    results = {
-        'tesseract_path': TESSERACT_PATH,
-        'tesseract_found': TESSERACT_PATH is not None,
-        'version': None,
-        'languages': [],
-        'test_ocr': None,
-        'errors': []
+    """Diagnostic route to check OCR.space API availability."""
+    diagnostic = {
+        "ocr_space_api_key": bool(OCRSPACE_API_KEY and OCRSPACE_API_KEY != "helloworld"),
+        "api_url": OCRSPACE_API_URL,
+        "timeout_seconds": OCRSPACE_API_TIMEOUT,
+        "last_response_status": None,
+        "last_response_message": None,
+        "errors": [],
     }
-    
-    # Check Tesseract version
+
+    if not diagnostic["ocr_space_api_key"]:
+        diagnostic["errors"].append(
+            "OCR_SPACE_API_KEY is not configured. The shared demo key may be rate limited."
+        )
+
     try:
-        if TESSERACT_PATH:
-            result = subprocess.run([TESSERACT_PATH, '--version'], 
-                                  capture_output=True, text=True, timeout=10)
-            if result.returncode == 0:
-                results['version'] = result.stdout.strip().split('\n')[0]
+        test_img = Image.new("RGB", (280, 60), color="white")
+        draw = ImageDraw.Draw(test_img)
+        draw.text((10, 20), "TEST OCR", fill="black")
+
+        with io.BytesIO() as buffer:
+            test_img.save(buffer, format="PNG")
+            buffer.seek(0)
+            files = {"file": ("test.png", buffer.read())}
+
+        payload = {
+            "apikey": OCRSPACE_API_KEY,
+            "language": "eng",
+            "isOverlayRequired": False,
+        }
+        response = requests.post(
+            OCRSPACE_API_URL,
+            files=files,
+            data=payload,
+            timeout=OCRSPACE_API_TIMEOUT,
+        )
+
+        diagnostic["last_response_status"] = response.status_code
+        if response.status_code == 200:
+            result = response.json()
+            if result.get("IsErroredOnProcessing"):
+                message = result.get("ErrorMessage") or result.get("ErrorDetails") or "Unknown OCR error."
+                if isinstance(message, list):
+                    message = "; ".join(str(item) for item in message if item)
+                diagnostic["last_response_message"] = message
+                diagnostic["errors"].append(message)
             else:
-                results['errors'].append(f"Version check failed: {result.stderr}")
+                diagnostic["last_response_message"] = (
+                    result.get("ParsedResults", [{}])[0].get("ParsedText", "").strip()
+                )
         else:
-            results['errors'].append("Tesseract executable not found")
-    except Exception as e:
-        results['errors'].append(f"Version check error: {str(e)}")
-    
-    # Check available languages
-    try:
-        if TESSERACT_PATH:
-            result = subprocess.run([TESSERACT_PATH, '--list-langs'], 
-                                  capture_output=True, text=True, timeout=10)
-            if result.returncode == 0:
-                langs = result.stdout.strip().split('\n')[1:]  # Skip header
-                results['languages'] = [lang.strip() for lang in langs if lang.strip()]
-            else:
-                results['errors'].append(f"Language check failed: {result.stderr}")
-    except Exception as e:
-        results['errors'].append(f"Language check error: {str(e)}")
-    
-    # Test OCR functionality
-    try:
-        if TESSERACT_PATH:
-            # Create a simple test image in memory
-            from PIL import Image, ImageDraw
-            img = Image.new('RGB', (200, 50), color='white')
-            draw = ImageDraw.Draw(img)
-            draw.text((10, 10), "TEST OCR", fill='black')
-            
-            # Save to temporary file
-            import tempfile
-            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
-                img.save(tmp.name)
-                tmp_path = tmp.name
-            
-            # Try OCR
-            import pytesseract
-            text = pytesseract.image_to_string(img, config='--psm 6')
-            results['test_ocr'] = text.strip() if text.strip() else "No text extracted"
-            
-            # Clean up
-            import os
-            os.unlink(tmp_path)
-        else:
-            results['test_ocr'] = "Cannot test - Tesseract not found"
-    except Exception as e:
-        results['errors'].append(f"OCR test error: {str(e)}")
-        results['test_ocr'] = f"Test failed: {str(e)}"
-    
-    # Generate HTML response
-    status_color = "green" if results['tesseract_found'] and not results['errors'] else "red"
-    
+            diagnostic["last_response_message"] = response.text[:500]
+    except Exception as exc:
+        diagnostic["errors"].append(str(exc))
+
+    status_color = "green" if not diagnostic["errors"] else "red"
     html = f"""
     <!DOCTYPE html>
     <html>
@@ -2524,41 +2312,37 @@ def check_ocr():
         </style>
     </head>
     <body>
-        <h1>🔍 Tesseract OCR Diagnostic</h1>
-        
-        <h2>Installation Status: <span class="status">
-            {"✅ WORKING" if results['tesseract_found'] and not results['errors'] else "❌ ISSUES DETECTED"}
+        <h1>🔍 OCR.space Diagnostic</h1>
+
+        <h2>Service Status: <span class="status">
+            {"✅ AVAILABLE" if not diagnostic['errors'] else "❌ ISSUES DETECTED"}
         </span></h2>
-        
+
         <div style="background: #f9f9f9; padding: 15px; border-radius: 5px; margin: 20px 0;">
-            <h3>📍 Tesseract Path</h3>
-            <p><strong>Detected Path:</strong> {results['tesseract_path'] or 'Not found'}</p>
-            
-            <h3>📋 Version</h3>
-            <p><strong>Version:</strong> {results['version'] or 'Unknown'}</p>
-            
-            <h3>🌐 Available Languages</h3>
-            <p><strong>Languages:</strong> {', '.join(results['languages']) if results['languages'] else 'None detected'}</p>
-            
-            <h3>🧪 OCR Test</h3>
-            <p><strong>Test Result:</strong> {results['test_ocr'] or 'Not tested'}</p>
+            <h3>API Endpoint</h3>
+            <p><strong>URL:</strong> {diagnostic['api_url']}</p>
+            <h3>API Key Configured</h3>
+            <p>{'Yes' if diagnostic['ocr_space_api_key'] else 'No'}</p>
+            <h3>Last Response Status</h3>
+            <p>{diagnostic['last_response_status'] or 'Not checked'}</p>
+            <h3>Last Response Message</h3>
+            <pre>{diagnostic['last_response_message'] or 'No message'}</pre>
         </div>
-        
-        {"<div class='error'><h3>❌ Errors</h3><ul>" + "".join(f"<li>{error}</li>" for error in results['errors']) + "</ul></div>" if results['errors'] else ""}
-        
-        <h3>🔧 Troubleshooting</h3>
+
+        {"<div class='error'><h3>❌ Errors</h3><ul>" + "".join(f"<li>{error}</li>" for error in diagnostic['errors']) + "</ul></div>" if diagnostic['errors'] else ""}
+
+        <h3>Notes</h3>
         <ul>
-            <li><strong>On Linux (Render/Ubuntu):</strong> Install with <code>sudo apt-get install tesseract-ocr tesseract-ocr-eng tesseract-ocr-hin tesseract-ocr-ben</code></li>
-            <li><strong>On Windows:</strong> Download from <a href="https://github.com/UB-Mannheim/tesseract/wiki" target="_blank">GitHub</a></li>
-            <li><strong>Check PATH:</strong> Ensure tesseract is in your system PATH</li>
-            <li><strong>Language Packs:</strong> Install language packs for Hindi/Bengali text recognition</li>
+            <li>The demo key is functional but may be slow or rate limited.</li>
+            <li>Set <code>OCR_SPACE_API_KEY</code> in your Render environment for production use.</li>
+            <li>OCR.space supports languages like <code>eng</code>, <code>hin</code>, and <code>ben</code>.</li>
         </ul>
-        
+
         <p><a href="/detect">← Back to Fraud Detection</a> | <a href="/dashboard">Dashboard</a></p>
     </body>
     </html>
     """
-    
+
     return html
 
 # ---------------- FORGOT PASSWORD ROUTES ----------------
@@ -3926,54 +3710,32 @@ def admin_logout():
 @app.route("/ocr_debug", methods=["GET", "POST"])
 @login_required
 def ocr_debug():
-    """Debug route to test OCR on images"""
+    """Debug route to test OCR.space on image uploads."""
     if request.method == "POST":
         if 'image' not in request.files:
             flash("No image file", "error")
             return redirect("/ocr_debug")
-        
+
         image_file = request.files['image']
         if image_file.filename == '':
             flash("No selected file", "error")
             return redirect("/ocr_debug")
-        
-        # Save and process image
+
         with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_file:
             image_path = tmp_file.name
             image_file.save(image_path)
-        
-        # Try different OCR settings
-        img = Image.open(image_path)
-        processed_img = preprocess_image(image_path)
-        
-        results = []
-        
-        # Test different configurations
-        test_configs = [
-            ("Default", r'--oem 3 --psm 3 -l eng'),
-            ("Single block", r'--oem 3 --psm 6 -l eng'),
-            ("Single line", r'--oem 3 --psm 7 -l eng'),
-            ("Single word", r'--oem 3 --psm 8 -l eng'),
-            ("Sparse text", r'--oem 3 --psm 11 -l eng'),
-            ("Hindi", r'--oem 3 --psm 6 -l hin'),
-            ("English+Hindi", r'--oem 3 --psm 6 -l eng+hin'),
-        ]
-        
-        for name, config in test_configs:
+
+        try:
+            extracted_text = extract_text_with_ocrspace(image_path, selected_language="eng")
+            results = [("OCR.space", extracted_text.strip())]
+        finally:
             try:
-                if processed_img:
-                    text = pytesseract.image_to_string(processed_img, config=config)
-                else:
-                    text = pytesseract.image_to_string(img, config=config)
-                results.append((name, text.strip()))
-            except:
-                results.append((name, "ERROR"))
-        
-        # Clean up
-        os.unlink(image_path)
-        
+                os.unlink(image_path)
+            except Exception:
+                pass
+
         return render_template("ocr_debug.html", results=results, image_name=image_file.filename)
-    
+
     return render_template("ocr_debug.html", results=None, image_name=None)
 
 # ---------------- ERROR HANDLERS ----------------
