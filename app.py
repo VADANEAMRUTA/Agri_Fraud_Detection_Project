@@ -187,6 +187,23 @@ def get_mysql_connection(database=None):
         database=database,
     )
 
+
+def get_mysql_columns_from_connection(conn, table_name):
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s
+        ORDER BY ORDINAL_POSITION
+        """,
+        (table_name,)
+    )
+    columns = {row[0].lower() for row in cursor.fetchall() or []}
+    cursor.close()
+    return columns
+
+
 # ---------------- ADMIN REQUIRED DECORATOR ----------------
 def admin_required(f):
     """Decorator to require admin access"""
@@ -4344,38 +4361,55 @@ def get_admin_dashboard_context():
 
     try:
         conn = get_mysql_connection()
+        users_columns = get_mysql_columns_from_connection(conn, 'users')
+        scans_columns = get_mysql_columns_from_connection(conn, 'scans')
         cursor = conn.cursor(dictionary=True)
 
-        cursor.execute("SELECT id, username, email, mobile, role, created_at FROM users ORDER BY created_at DESC")
+        user_fields = [
+            'id',
+            "COALESCE(username, '') AS username",
+            "COALESCE(email, '') AS email",
+            "COALESCE(mobile, '') AS mobile" if 'mobile' in users_columns else "'' AS mobile",
+            "COALESCE(fullname, '') AS fullname" if 'fullname' in users_columns else "'' AS fullname",
+            "COALESCE(role, 'farmer') AS role" if 'role' in users_columns else "'farmer' AS role",
+            'created_at' if 'created_at' in users_columns else "'1970-01-01 00:00:00' AS created_at"
+        ]
+        user_order = 'created_at DESC' if 'created_at' in users_columns else 'id DESC'
+        cursor.execute(f"SELECT {', '.join(user_fields)} FROM users ORDER BY {user_order}")
         users = cursor.fetchall() or []
 
-        cursor.execute("""
-            SELECT
-                COUNT(*) AS total_users,
-                SUM(CASE WHEN LOWER(role) = 'admin' THEN 1 ELSE 0 END) AS admin_users,
-                SUM(CASE WHEN LOWER(role) = 'farmer' THEN 1 ELSE 0 END) AS farmer_users
-            FROM users
-        """)
+        if 'role' in users_columns:
+            cursor.execute("""
+                SELECT
+                    COUNT(*) AS total_users,
+                    SUM(CASE WHEN LOWER(role) = 'admin' THEN 1 ELSE 0 END) AS admin_users,
+                    SUM(CASE WHEN LOWER(role) = 'farmer' THEN 1 ELSE 0 END) AS farmer_users
+                FROM users
+            """)
+        else:
+            cursor.execute("SELECT COUNT(*) AS total_users, 0 AS admin_users, 0 AS farmer_users FROM users")
+
         counts = cursor.fetchone() or {}
         stats['total_users'] = int(counts.get('total_users') or 0)
         stats['admin_users'] = int(counts.get('admin_users') or 0)
         stats['farmer_users'] = int(counts.get('farmer_users') or 0)
 
-        cursor.execute("""
-            SELECT
-                s.id,
-                s.user_id,
-                COALESCE(u.username, 'Anonymous') AS username,
-                s.content_type,
-                s.content,
-                s.result,
-                s.confidence,
-                s.created_at
-            FROM scans s
-            LEFT JOIN users u ON s.user_id = u.id
-            ORDER BY s.created_at DESC
-            LIMIT 100
-        """)
+        scan_fields = [
+            's.id',
+            's.user_id',
+            "COALESCE(u.username, 'Anonymous') AS username",
+            "COALESCE(s.content_type, 'Unknown') AS content_type" if 'content_type' in scans_columns else "'Unknown' AS content_type",
+            "COALESCE(s.content, '') AS content" if 'content' in scans_columns else "'' AS content",
+            "COALESCE(s.result, 'Unknown') AS result" if 'result' in scans_columns else "'Unknown' AS result",
+            "COALESCE(s.confidence, 0) AS confidence" if 'confidence' in scans_columns else '0 AS confidence',
+            's.created_at' if 'created_at' in scans_columns else "NOW() AS created_at"
+        ]
+        scan_order = 's.created_at DESC' if 'created_at' in scans_columns else 's.id DESC'
+        cursor.execute(
+            f"SELECT {', '.join(scan_fields)} FROM scans s "
+            "LEFT JOIN users u ON s.user_id = u.id "
+            f"ORDER BY {scan_order} LIMIT 100"
+        )
         fraud_checks = cursor.fetchall() or []
 
         cursor.execute("""
@@ -4412,8 +4446,95 @@ def get_admin_dashboard_context():
 @app.route('/admin')
 @admin_required
 def admin_dashboard():
-    context = get_admin_dashboard_context()
-    return render_template('admin_dashboard.html', **context)
+    """Admin dashboard with MySQL data"""
+    
+    import mysql.connector
+    import os
+    
+    users = []
+    fraud_checks = []
+    stats = {
+        'total_users': 0,
+        'admin_users': 0,
+        'farmer_users': 0,
+        'total_checks': 0,
+        'fraud_rate': 0
+    }
+    error_message = None
+    
+    try:
+        # Get credentials
+        host = os.getenv('MYSQL_HOST')
+        port = os.getenv('MYSQL_PORT')
+        user = os.getenv('MYSQL_USER')
+        password = os.getenv('MYSQL_PASSWORD')
+        database = os.getenv('MYSQL_DB_USERS')
+        
+        # Check if all credentials exist
+        if not host:
+            error_message = "MYSQL_HOST not set in environment"
+        elif not port:
+            error_message = "MYSQL_PORT not set in environment"
+        elif not user:
+            error_message = "MYSQL_USER not set in environment"
+        elif not database:
+            error_message = "MYSQL_DB_USERS not set in environment"
+        else:
+            # Connect to MySQL
+            conn = mysql.connector.connect(
+                host=host,
+                port=int(port),
+                user=user,
+                password=password,
+                database=database
+            )
+            cursor = conn.cursor(dictionary=True)
+            
+            # Get all users
+            cursor.execute("SELECT id, username, email, COALESCE(mobile, '') as mobile, COALESCE(role, 'farmer') as role, COALESCE(created_at, NOW()) as created_at FROM users ORDER BY id DESC")
+            users = cursor.fetchall()
+            
+            # Get statistics
+            cursor.execute("SELECT COUNT(*) as total FROM users")
+            stats['total_users'] = cursor.fetchone()['total']
+            
+            cursor.execute("SELECT COUNT(*) as total FROM users WHERE COALESCE(role, 'farmer') = 'admin'")
+            stats['admin_users'] = cursor.fetchone()['total']
+            
+            cursor.execute("SELECT COUNT(*) as total FROM users WHERE COALESCE(role, 'farmer') = 'farmer'")
+            stats['farmer_users'] = cursor.fetchone()['total']
+            
+            # Get fraud checks
+            cursor.execute("""
+                SELECT s.id, s.user_id, s.content_type, s.content, s.result, s.confidence, COALESCE(s.created_at, NOW()) as created_at,
+                       COALESCE(u.username, 'Unknown') as username
+                FROM scans s
+                LEFT JOIN users u ON s.user_id = u.id
+                ORDER BY s.id DESC
+                LIMIT 50
+            """)
+            fraud_checks = cursor.fetchall()
+            
+            stats['total_checks'] = len(fraud_checks)
+            fraud_count = 0
+            for check in fraud_checks:
+                if check.get('result') and 'Fraud' in str(check['result']):
+                    fraud_count += 1
+            stats['fraud_rate'] = round((fraud_count / stats['total_checks'] * 100), 1) if stats['total_checks'] > 0 else 0
+            
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        error_message = str(e)
+        print(f"Admin error: {e}")
+    
+    return render_template('admin_dashboard.html', 
+                         users=users, 
+                         fraud_checks=fraud_checks,
+                         stats=stats,
+                         session=session,
+                         error_message=error_message)
 
 
 @app.route('/admin/profile')
@@ -4585,22 +4706,25 @@ def admin_get_users():
 def admin_get_fraud_checks():
     try:
         conn = get_mysql_connection()
+        scans_columns = get_mysql_columns_from_connection(conn, 'scans')
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("""
-            SELECT
-                s.id,
-                s.user_id,
-                COALESCE(u.username, 'Anonymous') AS username,
-                s.content_type AS input_type,
-                s.content,
-                s.result,
-                s.confidence,
-                s.created_at
-            FROM scans s
-            LEFT JOIN users u ON s.user_id = u.id
-            ORDER BY s.created_at DESC
-            LIMIT 50
-        """)
+
+        scan_fields = [
+            's.id',
+            's.user_id',
+            "COALESCE(u.username, 'Anonymous') AS username",
+            "COALESCE(s.content_type, 'Unknown') AS input_type" if 'content_type' in scans_columns else "'Unknown' AS input_type",
+            "COALESCE(s.content, '') AS content" if 'content' in scans_columns else "'' AS content",
+            "COALESCE(s.result, 'Unknown') AS result" if 'result' in scans_columns else "'Unknown' AS result",
+            "COALESCE(s.confidence, 0) AS confidence" if 'confidence' in scans_columns else '0 AS confidence',
+            's.created_at' if 'created_at' in scans_columns else "NOW() AS created_at"
+        ]
+        scan_order = 's.created_at DESC' if 'created_at' in scans_columns else 's.id DESC'
+        cursor.execute(
+            f"SELECT {', '.join(scan_fields)} FROM scans s "
+            "LEFT JOIN users u ON s.user_id = u.id "
+            f"ORDER BY {scan_order} LIMIT 50"
+        )
         checks = cursor.fetchall() or []
         cursor.close()
         conn.close()
@@ -4610,58 +4734,44 @@ def admin_get_fraud_checks():
         return jsonify({'checks': []}), 500
 
 
-@app.route('/debug-admin-data')
-@admin_required
-def debug_admin_data():
+@app.route('/debug-db')
+def debug_db():
+    """Simple debug to check database connection"""
+    import mysql.connector
+    import os
+    
+    result = {
+        'mysql_host': os.getenv('MYSQL_HOST'),
+        'mysql_port': os.getenv('MYSQL_PORT'),
+        'mysql_user': os.getenv('MYSQL_USER'),
+        'mysql_db': os.getenv('MYSQL_DB_USERS'),
+        'mysql_password_set': 'yes' if os.getenv('MYSQL_PASSWORD') else 'no'
+    }
+    
     try:
-        conn = get_mysql_connection()
-        cursor = conn.cursor(dictionary=True)
-
-        cursor.execute("SELECT id, username, email, mobile, role, created_at FROM users ORDER BY created_at DESC")
-        users = cursor.fetchall() or []
-
-        cursor.execute("""
-            SELECT
-                s.id,
-                s.user_id,
-                COALESCE(u.username, 'Anonymous') AS username,
-                s.content_type,
-                s.content,
-                s.result,
-                s.confidence,
-                s.created_at
-            FROM scans s
-            LEFT JOIN users u ON s.user_id = u.id
-            ORDER BY s.created_at DESC
-            LIMIT 200
-        """)
-        scans = cursor.fetchall() or []
-
-        cursor.execute("SELECT COUNT(*) AS user_count FROM users")
-        user_count = int(cursor.fetchone().get('user_count') or 0)
-
-        cursor.execute("SELECT COUNT(*) AS scan_count FROM scans")
-        scan_count = int(cursor.fetchone().get('scan_count') or 0)
-
+        conn = mysql.connector.connect(
+            host=os.getenv('MYSQL_HOST'),
+            port=int(os.getenv('MYSQL_PORT', 3306)),
+            user=os.getenv('MYSQL_USER'),
+            password=os.getenv('MYSQL_PASSWORD'),
+            database=os.getenv('MYSQL_DB_USERS')
+        )
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM users")
+        user_count = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM scans")
+        scan_count = cursor.fetchone()[0]
+        
+        result['connection'] = 'SUCCESS'
+        result['user_count'] = user_count
+        result['scan_count'] = scan_count
         cursor.close()
         conn.close()
-
-        return jsonify({
-            'users': users,
-            'scans': scans,
-            'stats': {
-                'user_count': user_count,
-                'scan_count': scan_count
-            }
-        })
     except Exception as e:
-        print(f"❌ /debug-admin-data failed: {e}")
-        return jsonify({
-            'error': str(e),
-            'users': [],
-            'scans': [],
-            'stats': {'user_count': 0, 'scan_count': 0}
-        }), 500
+        result['connection'] = 'FAILED'
+        result['error'] = str(e)
+    
+    return jsonify(result)
 
 
 @app.route('/admin/get_settings')
