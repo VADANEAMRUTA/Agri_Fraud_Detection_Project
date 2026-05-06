@@ -4302,18 +4302,16 @@ def debug_fraud_checks():
         total_scans = int(cursor.fetchone().get('total', 0) or 0)
 
         cursor.execute(
-            "SELECT s.id, s.user_id, COALESCE(u.username, 'Anonymous') AS username, "
-            "COALESCE(s.content_type, 'Unknown') AS content_type, "
+            "SELECT s.id, s.user_id, COALESCE(u.username, 'Unknown') AS username, "
             "COALESCE(s.content, '') AS content, "
             "COALESCE(s.result, 'Unknown') AS result, "
             "COALESCE(s.confidence, 0) AS confidence, "
-            "COALESCE(s.detection_method, 'rule-based') AS detection_method, "
             "COALESCE(s.created_at, NOW()) AS created_at "
             "FROM scans s "
             "LEFT JOIN users u ON s.user_id = u.id "
-            "ORDER BY s.created_at DESC, s.id DESC LIMIT 20"
+            "ORDER BY s.created_at DESC, s.id DESC"
         )
-        sample_records = cursor.fetchall() or []
+        scans = cursor.fetchall() or []
 
         cursor.close()
         conn.close()
@@ -4321,7 +4319,7 @@ def debug_fraud_checks():
         return jsonify({
             'success': True,
             'total_scans': total_scans,
-            'sample_records': sample_records,
+            'scans': scans,
         })
     except Exception as e:
         print(f"Debug fraud checks error: {e}")
