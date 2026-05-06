@@ -4213,10 +4213,7 @@ def get_admin_dashboard_context():
 @admin_required
 def admin_dashboard():
     """Admin dashboard with MySQL data"""
-    
-    import mysql.connector
-    import os
-    
+
     users = []
     fraud_checks = []
     stats = {
@@ -4224,83 +4221,111 @@ def admin_dashboard():
         'admin_users': 0,
         'farmer_users': 0,
         'total_checks': 0,
+        'total_fraud_checks': 0,
         'fraud_rate': 0
     }
     error_message = None
-    
+
     try:
-        # Get credentials
-        host = os.getenv('MYSQL_HOST')
-        port = os.getenv('MYSQL_PORT')
-        user = os.getenv('MYSQL_USER')
-        password = os.getenv('MYSQL_PASSWORD')
-        database = os.getenv('MYSQL_DB_USERS')
-        
-        # Check if all credentials exist
-        if not host:
-            error_message = "MYSQL_HOST not set in environment"
-        elif not port:
-            error_message = "MYSQL_PORT not set in environment"
-        elif not user:
-            error_message = "MYSQL_USER not set in environment"
-        elif not database:
-            error_message = "MYSQL_DB_USERS not set in environment"
-        else:
-            # Connect to MySQL
-            conn = mysql.connector.connect(
-                host=host,
-                port=int(port),
-                user=user,
-                password=password,
-                database=database
-            )
-            cursor = conn.cursor(dictionary=True)
-            
-            # Get all users
-            cursor.execute("SELECT id, username, email, COALESCE(mobile, '') as mobile, COALESCE(role, 'farmer') as role, COALESCE(created_at, NOW()) as created_at FROM users ORDER BY id DESC")
-            users = cursor.fetchall()
-            
-            # Get statistics
-            cursor.execute("SELECT COUNT(*) as total FROM users")
-            stats['total_users'] = cursor.fetchone()['total']
-            
-            cursor.execute("SELECT COUNT(*) as total FROM users WHERE COALESCE(role, 'farmer') = 'admin'")
-            stats['admin_users'] = cursor.fetchone()['total']
-            
-            cursor.execute("SELECT COUNT(*) as total FROM users WHERE COALESCE(role, 'farmer') = 'farmer'")
-            stats['farmer_users'] = cursor.fetchone()['total']
-            
-            # Get fraud checks
-            cursor.execute("""
-                SELECT s.id, s.user_id, s.content_type, s.content, s.result, s.confidence, COALESCE(s.created_at, NOW()) as created_at,
-                       COALESCE(u.username, 'Unknown') as username
-                FROM scans s
-                LEFT JOIN users u ON s.user_id = u.id
-                ORDER BY s.id DESC
-                LIMIT 50
-            """)
-            fraud_checks = cursor.fetchall()
-            
-            stats['total_checks'] = len(fraud_checks)
-            fraud_count = 0
-            for check in fraud_checks:
-                if check.get('result') and 'Fraud' in str(check['result']):
-                    fraud_count += 1
-            stats['fraud_rate'] = round((fraud_count / stats['total_checks'] * 100), 1) if stats['total_checks'] > 0 else 0
-            
-            cursor.close()
-            conn.close()
-            
+        conn = get_mysql_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        # Users
+        cursor.execute(
+            "SELECT id, username, email, COALESCE(mobile, '') AS mobile, COALESCE(role, 'farmer') AS role, COALESCE(created_at, NOW()) AS created_at "
+            "FROM users ORDER BY id DESC"
+        )
+        users = cursor.fetchall() or []
+
+        cursor.execute("SELECT COUNT(*) AS total FROM users")
+        stats['total_users'] = int(cursor.fetchone().get('total', 0) or 0)
+
+        cursor.execute("SELECT COUNT(*) AS total FROM users WHERE COALESCE(role, 'farmer') = 'admin'")
+        stats['admin_users'] = int(cursor.fetchone().get('total', 0) or 0)
+
+        cursor.execute("SELECT COUNT(*) AS total FROM users WHERE COALESCE(role, 'farmer') = 'farmer'")
+        stats['farmer_users'] = int(cursor.fetchone().get('total', 0) or 0)
+
+        # Fraud checks
+        cursor.execute(
+            "SELECT s.id, s.user_id, COALESCE(u.username, 'Anonymous') AS username, "
+            "COALESCE(s.content_type, 'Unknown') AS content_type, "
+            "COALESCE(s.content, '') AS content, "
+            "COALESCE(s.result, 'Unknown') AS result, "
+            "COALESCE(s.confidence, 0) AS confidence, "
+            "COALESCE(s.detection_method, 'rule-based') AS detection_method, "
+            "COALESCE(s.created_at, NOW()) AS created_at "
+            "FROM scans s "
+            "LEFT JOIN users u ON s.user_id = u.id "
+            "ORDER BY s.created_at DESC, s.id DESC LIMIT 50"
+        )
+        fraud_checks = cursor.fetchall() or []
+
+        stats['total_fraud_checks'] = len(fraud_checks)
+        stats['total_checks'] = stats['total_fraud_checks']
+
+        fraud_count = 0
+        for check in fraud_checks:
+            if check.get('result') and 'fraud' in str(check['result']).lower():
+                fraud_count += 1
+
+        stats['fraud_rate'] = round((fraud_count / stats['total_fraud_checks'] * 100), 1) if stats['total_fraud_checks'] > 0 else 0
+
+        cursor.close()
+        conn.close()
+
     except Exception as e:
         error_message = str(e)
         print(f"Admin error: {e}")
-    
-    return render_template('admin_dashboard.html', 
-                         users=users, 
-                         fraud_checks=fraud_checks,
-                         stats=stats,
-                         session=session,
-                         error_message=error_message)
+
+    return render_template(
+        'admin_dashboard.html',
+        users=users,
+        fraud_checks=fraud_checks,
+        stats=stats,
+        session=session,
+        error_message=error_message
+    )
+
+
+@app.route('/debug-fraud-checks')
+@admin_required
+def debug_fraud_checks():
+    """Debug route to verify fraud checks are fetched correctly."""
+    try:
+        conn = get_mysql_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        cursor.execute(
+            "SELECT COUNT(*) AS total FROM scans"
+        )
+        total_scans = int(cursor.fetchone().get('total', 0) or 0)
+
+        cursor.execute(
+            "SELECT s.id, s.user_id, COALESCE(u.username, 'Anonymous') AS username, "
+            "COALESCE(s.content_type, 'Unknown') AS content_type, "
+            "COALESCE(s.content, '') AS content, "
+            "COALESCE(s.result, 'Unknown') AS result, "
+            "COALESCE(s.confidence, 0) AS confidence, "
+            "COALESCE(s.detection_method, 'rule-based') AS detection_method, "
+            "COALESCE(s.created_at, NOW()) AS created_at "
+            "FROM scans s "
+            "LEFT JOIN users u ON s.user_id = u.id "
+            "ORDER BY s.created_at DESC, s.id DESC LIMIT 20"
+        )
+        sample_records = cursor.fetchall() or []
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'total_scans': total_scans,
+            'sample_records': sample_records,
+        })
+    except Exception as e:
+        print(f"Debug fraud checks error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/admin/profile')
