@@ -4220,7 +4220,6 @@ def admin_dashboard():
         'total_users': 0,
         'admin_users': 0,
         'farmer_users': 0,
-        'total_checks': 0,
         'total_fraud_checks': 0,
         'fraud_rate': 0
     }
@@ -4230,9 +4229,9 @@ def admin_dashboard():
         conn = get_mysql_connection()
         cursor = conn.cursor(dictionary=True)
 
-        # Users
+        # Load users
         cursor.execute(
-            "SELECT id, username, email, COALESCE(mobile, '') AS mobile, COALESCE(role, 'farmer') AS role, COALESCE(created_at, NOW()) AS created_at "
+            "SELECT id, username, email, COALESCE(role, 'farmer') AS role, COALESCE(created_at, NOW()) AS created_at "
             "FROM users ORDER BY id DESC"
         )
         users = cursor.fetchall() or []
@@ -4246,29 +4245,22 @@ def admin_dashboard():
         cursor.execute("SELECT COUNT(*) AS total FROM users WHERE COALESCE(role, 'farmer') = 'farmer'")
         stats['farmer_users'] = int(cursor.fetchone().get('total', 0) or 0)
 
-        # Fraud checks
+        # Fetch fraud checks with username using LEFT JOIN
         cursor.execute(
-            "SELECT s.id, s.user_id, COALESCE(u.username, 'Anonymous') AS username, "
-            "COALESCE(s.content_type, 'Unknown') AS content_type, "
-            "COALESCE(s.content, '') AS content, "
-            "COALESCE(s.result, 'Unknown') AS result, "
-            "COALESCE(s.confidence, 0) AS confidence, "
-            "COALESCE(s.detection_method, 'rule-based') AS detection_method, "
-            "COALESCE(s.created_at, NOW()) AS created_at "
+            "SELECT s.*, COALESCE(u.username, 'Unknown') AS username "
             "FROM scans s "
             "LEFT JOIN users u ON s.user_id = u.id "
-            "ORDER BY s.created_at DESC, s.id DESC LIMIT 50"
+            "ORDER BY s.id DESC"
         )
         fraud_checks = cursor.fetchall() or []
 
         stats['total_fraud_checks'] = len(fraud_checks)
-        stats['total_checks'] = stats['total_fraud_checks']
+        print(f"DEBUG: Loaded {stats['total_fraud_checks']} fraud_checks from MySQL")
 
         fraud_count = 0
         for check in fraud_checks:
             if check.get('result') and 'fraud' in str(check['result']).lower():
                 fraud_count += 1
-
         stats['fraud_rate'] = round((fraud_count / stats['total_fraud_checks'] * 100), 1) if stats['total_fraud_checks'] > 0 else 0
 
         cursor.close()
@@ -4288,42 +4280,57 @@ def admin_dashboard():
     )
 
 
-@app.route('/debug-fraud-checks')
+@app.route('/debug-scans')
 @admin_required
-def debug_fraud_checks():
-    """Debug route to verify fraud checks are fetched correctly."""
+def debug_scans():
+    """Debug route to verify scans table content."""
     try:
         conn = get_mysql_connection()
         cursor = conn.cursor(dictionary=True)
+        database_name = os.getenv('MYSQL_DB_USERS')
 
         cursor.execute(
-            "SELECT COUNT(*) AS total FROM scans"
+            "SELECT COUNT(*) AS table_count FROM INFORMATION_SCHEMA.TABLES "
+            "WHERE TABLE_SCHEMA = %s AND TABLE_NAME = 'scans'",
+            (database_name,)
         )
-        total_scans = int(cursor.fetchone().get('total', 0) or 0)
+        table_exists = bool(cursor.fetchone().get('table_count', 0))
 
-        cursor.execute(
-            "SELECT s.id, s.user_id, COALESCE(u.username, 'Unknown') AS username, "
-            "COALESCE(s.content, '') AS content, "
-            "COALESCE(s.result, 'Unknown') AS result, "
-            "COALESCE(s.confidence, 0) AS confidence, "
-            "COALESCE(s.created_at, NOW()) AS created_at "
-            "FROM scans s "
-            "LEFT JOIN users u ON s.user_id = u.id "
-            "ORDER BY s.created_at DESC, s.id DESC"
-        )
-        scans = cursor.fetchall() or []
+        columns = []
+        scans = []
+        scan_count = 0
+
+        if table_exists:
+            cursor.execute(
+                "SELECT s.*, COALESCE(u.username, 'Unknown') AS username "
+                "FROM scans s "
+                "LEFT JOIN users u ON s.user_id = u.id "
+                "ORDER BY s.id DESC"
+            )
+            scans = cursor.fetchall() or []
+            columns = [col[0] for col in cursor.description] if cursor.description else []
+            scan_count = len(scans)
 
         cursor.close()
         conn.close()
 
         return jsonify({
             'success': True,
-            'total_scans': total_scans,
+            'scan_count': scan_count,
             'scans': scans,
+            'columns': columns,
+            'table_exists': table_exists
         })
     except Exception as e:
-        print(f"Debug fraud checks error: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        print(f"Debug scans error: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'scan_count': 0,
+            'scans': [],
+            'columns': [],
+            'table_exists': False
+        }), 500
 
 
 @app.route('/admin/profile')
