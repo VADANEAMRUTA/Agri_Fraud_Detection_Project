@@ -1641,7 +1641,28 @@ def ensure_mysql_log_tables(conn):
                 cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
                 conn.commit()
 
+    for table_name in ("scans", "user_activity"):
+        try:
+            cursor.execute(f"ALTER TABLE {table_name} MODIFY COLUMN user_id INT NULL")
+            conn.commit()
+        except Exception as e:
+            print(f"Could not relax {table_name}.user_id nullability: {e}")
+
     cursor.close()
+
+def mysql_user_exists(conn, user_id):
+    """Return True when the scan user exists in the current MySQL users table."""
+    if user_id is None:
+        return False
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 FROM users WHERE id = %s LIMIT 1", (user_id,))
+        exists = cursor.fetchone() is not None
+        cursor.close()
+        return exists
+    except Exception as e:
+        print(f"Could not verify MySQL user before scan logging: {e}")
+        return False
 
 def log_user_activity_mysql(user_id, action, details, activity_type):
     """Log activity to MySQL."""
@@ -1662,23 +1683,41 @@ def log_scan_mysql(user_id, content_type, content, result, confidence, detection
     ensure_mysql_log_tables(conn)
     cursor = conn.cursor()
     safe_content = str(content or "")
+    mysql_user_id = user_id if mysql_user_exists(conn, user_id) else None
     cursor.execute("""
         INSERT INTO scans (user_id, content_type, content, result, confidence, detection_method)
         VALUES (%s, %s, %s, %s, %s, %s)
-    """, (user_id, content_type, safe_content[:500], result, confidence, detection_method))
+    """, (mysql_user_id, content_type, safe_content[:500], result, confidence, detection_method))
     conn.commit()
     cursor.close()
     conn.close()
 
     try:
         log_user_activity_mysql(
-            user_id,
+            mysql_user_id,
             'Fraud Analysis',
             f'Analyzed {content_type} with {detection_method}: {result}',
             'scan'
         )
     except Exception as e:
         print(f"MySQL activity logging failed after scan insert: {e}")
+
+def log_mysql_scan_error(user_id, error_message):
+    """Store MySQL scan logging failures where Railway users can inspect them."""
+    try:
+        conn = get_mysql_connection()
+        ensure_mysql_log_tables(conn)
+        cursor = conn.cursor()
+        mysql_user_id = user_id if mysql_user_exists(conn, user_id) else None
+        cursor.execute("""
+            INSERT INTO user_activity (user_id, action, details, type)
+            VALUES (%s, %s, %s, %s)
+        """, (mysql_user_id, "Scan Logging Error", str(error_message)[:500], "database"))
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        print(f"Could not write MySQL scan logging error: {e}")
 
 def log_scan(user_id, content_type, content, result, confidence):
     """Log scan to database"""
@@ -1692,6 +1731,7 @@ def log_scan_with_method(user_id, content_type, content, result, confidence, det
             return True
         except Exception as e:
             print(f"MySQL scan logging failed, falling back to SQLite: {e}")
+            log_mysql_scan_error(user_id, e)
 
     try:
         conn = get_db_connection()
