@@ -1578,33 +1578,129 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
+def should_use_mysql_for_logs():
+    """Use MySQL for scan/activity logs when deployment DB config exists."""
+    return any(os.getenv(name) for name in [
+        "MYSQL_HOST",
+        "DB_HOST",
+        "MYSQL_DB_USERS",
+        "MYSQL_DB_AGRIGUARD",
+        "DB_NAME",
+    ])
+
+def ensure_mysql_log_tables(conn):
+    """Ensure MySQL tables used by scan logging exist."""
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS scans (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT,
+            content_type VARCHAR(50),
+            content TEXT,
+            result TEXT,
+            confidence FLOAT,
+            detection_method VARCHAR(100) DEFAULT 'rule-based',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_activity (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT,
+            action VARCHAR(255),
+            details TEXT,
+            type VARCHAR(100),
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """)
+    conn.commit()
+
+    required_columns = {
+        "scans": {
+            "user_id": "INT",
+            "content_type": "VARCHAR(50)",
+            "content": "TEXT",
+            "result": "TEXT",
+            "confidence": "FLOAT",
+            "detection_method": "VARCHAR(100) DEFAULT 'rule-based'",
+            "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+        },
+        "user_activity": {
+            "user_id": "INT",
+            "action": "VARCHAR(255)",
+            "details": "TEXT",
+            "type": "VARCHAR(100)",
+            "timestamp": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+        },
+    }
+
+    for table_name, columns in required_columns.items():
+        for column_name, definition in columns.items():
+            cursor.execute(f"SHOW COLUMNS FROM {table_name} LIKE %s", (column_name,))
+            if cursor.fetchone() is None:
+                cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
+                conn.commit()
+
+    cursor.close()
+
+def log_user_activity_mysql(user_id, action, details, activity_type):
+    """Log activity to MySQL."""
+    conn = get_mysql_connection()
+    ensure_mysql_log_tables(conn)
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO user_activity (user_id, action, details, type)
+        VALUES (%s, %s, %s, %s)
+    """, (user_id, action, details, activity_type))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+def log_scan_mysql(user_id, content_type, content, result, confidence, detection_method):
+    """Log scan to MySQL."""
+    conn = get_mysql_connection()
+    ensure_mysql_log_tables(conn)
+    cursor = conn.cursor()
+    safe_content = str(content or "")
+    cursor.execute("""
+        INSERT INTO scans (user_id, content_type, content, result, confidence, detection_method)
+        VALUES (%s, %s, %s, %s, %s, %s)
+    """, (user_id, content_type, safe_content[:500], result, confidence, detection_method))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    try:
+        log_user_activity_mysql(
+            user_id,
+            'Fraud Analysis',
+            f'Analyzed {content_type} with {detection_method}: {result}',
+            'scan'
+        )
+    except Exception as e:
+        print(f"MySQL activity logging failed after scan insert: {e}")
+
 def log_scan(user_id, content_type, content, result, confidence):
     """Log scan to database"""
-    try:
-        conn = get_db_connection()
-        c = conn.cursor()
-        c.execute("""
-            INSERT INTO scans (user_id, content_type, content, result, confidence)
-            VALUES (?, ?, ?, ?, ?)
-        """, (user_id, content_type, content[:500], result, confidence))
-        conn.commit()
-        conn.close()
-        
-        # Log activity
-        log_user_activity(user_id, 'Fraud Analysis', 
-                         f'Analyzed {content_type} with result: {result}', 'scan')
-    except Exception as e:
-        print(f"Error logging scan: {e}")
+    return log_scan_with_method(user_id, content_type, content, result, confidence, 'rule-based')
 
 def log_scan_with_method(user_id, content_type, content, result, confidence, detection_method):
     """Log scan with detection method"""
+    if should_use_mysql_for_logs():
+        try:
+            log_scan_mysql(user_id, content_type, content, result, confidence, detection_method)
+            return True
+        except Exception as e:
+            print(f"MySQL scan logging failed, falling back to SQLite: {e}")
+
     try:
         conn = get_db_connection()
         c = conn.cursor()
+        safe_content = str(content or "")
         c.execute("""
             INSERT INTO scans (user_id, content_type, content, result, confidence, detection_method)
             VALUES (?, ?, ?, ?, ?, ?)
-        """, (user_id, content_type, content[:500], result, confidence, detection_method))
+        """, (user_id, content_type, safe_content[:500], result, confidence, detection_method))
         conn.commit()
         conn.close()
         
@@ -4768,25 +4864,42 @@ def admin_users():
 @admin_required
 def admin_scans():
     """View all scans"""
-    import sqlite3
-    
+    scans = []
+
+    if should_use_mysql_for_logs():
+        try:
+            conn = get_mysql_connection()
+            ensure_mysql_log_tables(conn)
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("""
+                SELECT s.*, u.username, u.email
+                FROM scans s
+                LEFT JOIN users u ON s.user_id = u.id
+                ORDER BY s.created_at DESC
+            """)
+            scans = cursor.fetchall() or []
+            cursor.close()
+            conn.close()
+            return render_template("admin_scans.html", scans=scans, is_admin=True)
+        except Exception as e:
+            print(f"MySQL admin scans read failed, falling back to SQLite: {e}")
+
     conn = sqlite3.connect("users.db")
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
-    
+
     c.execute("""
         SELECT s.*, u.username, u.email
         FROM scans s
         LEFT JOIN users u ON s.user_id = u.id
         ORDER BY s.created_at DESC
     """)
-    
-    scans = []
+
     for row in c.fetchall():
         scans.append(dict(row))
-    
+
     conn.close()
-    
+
     return render_template("admin_scans.html", scans=scans, is_admin=True)
 
 @app.route("/admin/activities")
